@@ -1,0 +1,8 @@
+# Holiday Home Booking Project Rules
+- Environment: Static Frontend (GitHub Pages) + Backend (Google Apps Script).
+- Cost Constraint: $0 (No paid tiers).
+- Styling: Tailwind CSS (Modern, clean "Airbnb" aesthetic).
+- Calendar Library: FullCalendar.io (Resource Timeline view).
+- Data Flow: Frontend -> Fetch API -> Google Apps Script Web App -> Google Sheets.
+- Formatting: Use ISO 8601 for all date handling to avoid timezone issues.
+- Security: Implement a simple "Family Access Code" stored in a constant.

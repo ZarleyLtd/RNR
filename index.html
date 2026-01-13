@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Holiday Home Booking</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Custom Styles -->
+    <style>
+        :root {
+            --cream-light: #faf9f7;
+            --cream: #f5f3f0;
+            --slate-gray: #4a5568;
+            --slate-dark: #2d3748;
+        }
+        
+        body {
+            background-color: var(--cream-light);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            color: var(--slate-dark);
+        }
+        
+        /* Scrollable multi-month calendar */
+        .calendar-scroll-container {
+            overflow-x: auto;
+            overflow-y: hidden;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+            scrollbar-color: var(--slate-gray) var(--cream);
+        }
+        
+        .calendar-scroll-container::-webkit-scrollbar {
+            height: 8px;
+        }
+        
+        .calendar-scroll-container::-webkit-scrollbar-track {
+            background: var(--cream);
+        }
+        
+        .calendar-scroll-container::-webkit-scrollbar-thumb {
+            background-color: var(--slate-gray);
+            border-radius: 4px;
+        }
+        
+        .calendar-months-grid {
+            display: inline-flex;
+            gap: 2rem;
+            padding: 1rem;
+            min-width: 100%;
+        }
+        
+        @media (min-width: 768px) {
+            .calendar-months-grid {
+                gap: 3rem;
+                padding: 1.5rem;
+            }
+        }
+        
+        .calendar-month {
+            min-width: 280px;
+            flex-shrink: 0;
+        }
+        
+        @media (min-width: 768px) {
+            .calendar-month {
+                min-width: 320px;
+            }
+        }
+        
+        .calendar-month-header {
+            text-align: center;
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--slate-dark);
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .calendar-weekdays {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 0.25rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .calendar-weekday {
+            text-align: center;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--slate-gray);
+            padding: 0.5rem;
+        }
+        
+        .calendar-days-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 0.25rem;
+        }
+        
+        .calendar-day {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+            border: 2px solid transparent;
+        }
+        
+        @media (min-width: 768px) {
+            .calendar-day {
+                font-size: 1rem;
+                padding: 0.5rem;
+            }
+        }
+        
+        /* Empty day (before month starts) */
+        .calendar-day.empty {
+            cursor: default;
+            pointer-events: none;
+        }
+        
+        /* Available - Bold black */
+        .calendar-day.available {
+            font-weight: 700;
+            color: var(--slate-dark);
+            background-color: transparent;
+        }
+        
+        .calendar-day.available:hover {
+            background-color: #f0f9ff;
+            border-color: var(--slate-gray);
+        }
+        
+        .calendar-day.available:active {
+            transform: scale(0.95);
+        }
+        
+        /* Fully booked - Grey */
+        .calendar-day.booked {
+            font-weight: 400;
+            color: #9ca3af;
+            background-color: #f3f4f6;
+            cursor: not-allowed;
+        }
+        
+        .calendar-day.booked:hover {
+            background-color: #e5e7eb;
+        }
+        
+        /* Partially booked - Orange */
+        .calendar-day.partial {
+            font-weight: 600;
+            color: #ea580c;
+            background-color: #fff7ed;
+        }
+        
+        .calendar-day.partial:hover {
+            background-color: #ffedd5;
+            border-color: #ea580c;
+        }
+        
+        .calendar-day.partial:active {
+            transform: scale(0.95);
+        }
+        
+        /* Today indicator */
+        .calendar-day.today {
+            border-color: var(--slate-gray);
+        }
+        
+        .calendar-day.today.available {
+            border-color: var(--slate-dark);
+            border-width: 2px;
+        }
+        
+        .calendar-day.today.partial {
+            border-color: #ea580c;
+        }
+        
+        .calendar-header {
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: 150px 1fr;
+            background-color: white;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .calendar-sidebar {
+            background-color: #f7fafc;
+            border-right: 1px solid #e2e8f0;
+        }
+        
+        .calendar-body {
+            overflow-x: auto;
+        }
+        
+        .calendar-resource-row {
+            display: grid;
+            grid-template-columns: 150px 1fr;
+            border-bottom: 1px solid #e2e8f0;
+            min-height: 60px;
+        }
+        
+        .calendar-resource-label {
+            background-color: #f7fafc;
+            border-right: 1px solid #e2e8f0;
+            padding: 12px;
+            display: flex;
+            align-items: center;
+            font-weight: 500;
+            color: var(--slate-dark);
+        }
+        
+        .calendar-dates-row {
+            display: grid;
+            grid-auto-columns: 80px;
+            grid-auto-flow: column;
+        }
+        
+        .calendar-date-header {
+            padding: 8px;
+            text-align: center;
+            border-right: 1px solid #e2e8f0;
+            font-size: 0.75rem;
+            color: var(--slate-gray);
+            background-color: white;
+        }
+        
+        .calendar-date-cell {
+            border-right: 1px solid #e2e8f0;
+            min-height: 60px;
+            position: relative;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .calendar-date-cell:hover {
+            background-color: #f7fafc;
+        }
+        
+        .calendar-date-cell.today {
+            background-color: #fef5e7;
+        }
+        
+        .calendar-booking {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            right: 4px;
+            background-color: var(--slate-gray);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            cursor: pointer;
+            z-index: 1;
+        }
+        
+        .calendar-booking:hover {
+            background-color: var(--slate-dark);
+        }
+        
+        .calendar-legend {
+            display: flex;
+            justify-content: center;
+            gap: 1.5rem;
+            padding: 1rem;
+            background-color: white;
+            border-top: 1px solid #e2e8f0;
+            flex-wrap: wrap;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+        }
+        
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+        }
+        
+        .legend-dot.available {
+            background-color: transparent;
+            border-color: var(--slate-dark);
+        }
+        
+        .legend-dot.booked {
+            background-color: #f3f4f6;
+        }
+        
+        .legend-dot.partial {
+            background-color: #fff7ed;
+            border-color: #ea580c;
+        }
+        
+        .legend-text {
+            color: var(--slate-gray);
+        }
+        
+        .modal-overlay {
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+        
+        .modal-content {
+            background-color: var(--cream-light);
+        }
+        
+        @media (max-width: 768px) {
+            .modal-content {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                max-height: 90vh;
+                border-radius: 20px 20px 0 0;
+                padding: 1.5rem;
+                margin: 0;
+                max-width: 100%;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+            
+            #closeModal {
+                min-width: 44px;
+                min-height: 44px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+        }
+        
+        input, textarea, select {
+            background-color: white;
+            border-color: #e2e8f0;
+        }
+        
+        @media (max-width: 768px) {
+            input, select {
+                font-size: 16px; /* Prevents zoom on iOS */
+                padding: 0.875rem;
+                min-height: 44px;
+            }
+        }
+        
+        input:focus, textarea:focus, select:focus {
+            border-color: var(--slate-gray);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(74, 85, 104, 0.1);
+        }
+        
+        /* Mobile header adjustments */
+        @media (max-width: 768px) {
+            header {
+                padding: 1rem 0;
+                margin-bottom: 1rem;
+            }
+            
+            header h1 {
+                font-size: 1.75rem;
+            }
+            
+            header p {
+                font-size: 0.875rem;
+            }
+            
+            .container {
+                padding-left: 1rem;
+                padding-right: 1rem;
+            }
+            
+            .bg-white.rounded-lg {
+                border-radius: 12px;
+                padding: 0;
+            }
+        }
+        
+        /* Toast message mobile positioning */
+        @media (max-width: 768px) {
+            #messageToast {
+                top: 1rem;
+                right: 1rem;
+                left: 1rem;
+                max-width: calc(100% - 2rem);
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-[#faf9f7]">
+    <!-- Password Overlay -->
+    <div id="passwordOverlay" class="fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+        <div class="modal-content rounded-lg shadow-xl p-8 max-w-md w-full mx-4">
+            <h2 class="text-2xl font-semibold mb-6 text-[#2d3748]">Family Access</h2>
+            <p class="text-[#4a5568] mb-4">Please enter the family password to continue:</p>
+            <input 
+                type="password" 
+                id="passwordInput" 
+                placeholder="Enter password"
+                class="w-full px-4 py-3 border rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-[#4a5568]"
+                autocomplete="off"
+            />
+            <button 
+                id="passwordSubmit"
+                class="w-full bg-[#4a5568] text-white py-3 rounded-lg font-medium hover:bg-[#2d3748] transition-colors"
+            >
+                Access Calendar
+            </button>
+            <p id="passwordError" class="text-red-600 text-sm mt-2 hidden">Incorrect password. Please try again.</p>
+        </div>
+    </div>
+    
+    <!-- Main Content -->
+    <div id="mainContent" class="hidden">
+        <div class="container mx-auto px-4 py-8">
+            <header class="mb-8">
+                <h1 class="text-4xl font-light text-[#2d3748] mb-2">Holiday Home</h1>
+                <p class="text-[#4a5568]">Book your stay with us</p>
+            </header>
+            
+            <!-- Calendar Container -->
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200">
+                <!-- Scrollable Calendar -->
+                <div class="calendar-scroll-container">
+                    <div id="calendarMonthsGrid" class="calendar-months-grid"></div>
+                </div>
+                
+                <!-- Legend -->
+                <div class="calendar-legend">
+                    <div class="legend-item">
+                        <div class="legend-dot available"></div>
+                        <span class="legend-text">Available</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot partial"></div>
+                        <span class="legend-text">Some rooms booked</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-dot booked"></div>
+                        <span class="legend-text">Fully booked</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Booking Modal -->
+    <div id="bookingModal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+        <div class="modal-content rounded-lg shadow-xl p-8 max-w-md w-full mx-4">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-semibold text-[#2d3748]">New Booking</h2>
+                <button 
+                    id="closeModal"
+                    class="text-[#4a5568] hover:text-[#2d3748] text-2xl font-light"
+                >
+                    ×
+                </button>
+            </div>
+            
+            <form id="bookingForm">
+                <div class="mb-4">
+                    <label for="guestName" class="block text-sm font-medium text-[#4a5568] mb-2">
+                        Guest Name
+                    </label>
+                    <input 
+                        type="text" 
+                        id="guestName" 
+                        name="guestName"
+                        required
+                        class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4a5568]"
+                        placeholder="Enter guest name"
+                    />
+                </div>
+                
+                <div class="mb-4">
+                    <label for="roomSelect" class="block text-sm font-medium text-[#4a5568] mb-2">
+                        Room
+                    </label>
+                    <select 
+                        id="roomSelect" 
+                        name="room"
+                        required
+                        class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4a5568] bg-white"
+                    >
+                        <option value="">Select a room</option>
+                        <option value="Master">Master</option>
+                        <option value="Twin">Twin</option>
+                        <option value="Bunk">Bunk</option>
+                    </select>
+                </div>
+                
+                <div class="mb-4">
+                    <label for="startDate" class="block text-sm font-medium text-[#4a5568] mb-2">
+                        Check-in Date
+                    </label>
+                    <input 
+                        type="date" 
+                        id="startDate" 
+                        name="startDate"
+                        required
+                        class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4a5568]"
+                    />
+                </div>
+                
+                <div class="mb-6">
+                    <label for="endDate" class="block text-sm font-medium text-[#4a5568] mb-2">
+                        Check-out Date
+                    </label>
+                    <input 
+                        type="date" 
+                        id="endDate" 
+                        name="endDate"
+                        required
+                        class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4a5568]"
+                    />
+                </div>
+                
+                <button 
+                    type="submit"
+                    class="w-full bg-[#4a5568] text-white py-3 rounded-lg font-medium hover:bg-[#2d3748] transition-colors"
+                >
+                    Book Stay
+                </button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Success/Error Messages -->
+    <div id="messageToast" class="hidden fixed top-4 right-4 z-50 bg-white rounded-lg shadow-lg p-4 border border-gray-200">
+        <p id="messageText" class="text-[#2d3748]"></p>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
