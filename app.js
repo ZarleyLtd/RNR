@@ -804,6 +804,17 @@ function updateEndDateMin() {
     }
 }
 
+// Get icon for room type
+function getRoomIcon(roomType) {
+    const icons = {
+        'Entire House': '🏠',
+        'Master': '👑',
+        'Twin': '🛏️',
+        'Bunk': '🚂'
+    };
+    return icons[roomType] || '🛏️';
+}
+
 // Render bookings list (current month to 12 months ahead)
 function renderBookingsList() {
     const bookingsListContainer = document.getElementById('bookingsList');
@@ -834,7 +845,7 @@ function renderBookingsList() {
         });
     
     if (upcomingBookings.length === 0) {
-        bookingsListContainer.innerHTML = '<p class="text-[#4a5568] text-center py-8">No upcoming bookings</p>';
+        bookingsListContainer.innerHTML = '<p class="text-[#4a5568] text-center py-8">No current bookings</p>';
         return;
     }
     
@@ -852,14 +863,18 @@ function renderBookingsList() {
     
     let html = '';
     upcomingBookings.forEach(booking => {
+        const roomIcon = getRoomIcon(booking.room);
         html += `
             <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
                 <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                    <div class="flex-1">
-                        <div class="font-semibold text-[#2d3748] mb-1">${escapeHtml(booking.guestName)}</div>
-                        <div class="text-sm text-[#4a5568]">
-                            <span class="font-medium">${booking.room} Room</span> • 
-                            ${formatDate(booking.startDate)} - ${formatDate(booking.endDate)}
+                    <div class="flex-1 flex items-start gap-3">
+                        <span class="text-2xl flex-shrink-0">${roomIcon}</span>
+                        <div class="flex-1">
+                            <div class="font-semibold text-[#1e293b] mb-1">${escapeHtml(booking.guestName)}</div>
+                            <div class="text-sm text-[#475569]">
+                                <span class="font-medium">${booking.room} Room</span> • 
+                                ${formatDate(booking.startDate)} - ${formatDate(booking.endDate)}
+                            </div>
                         </div>
                     </div>
                 </div>
