@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', function() {
     initializePasswordCheck();
     initializeBookingModal();
     initializeCalendar();
+    initializeMessageToast();
     loadBookings();
 });
 
@@ -212,6 +213,7 @@ async function loadBookings() {
             if (data.success && data.bookings) {
                 bookings = data.bookings;
                 renderCalendar();
+                renderBookingsList();
             }
         }
     } catch (error) {
@@ -243,6 +245,10 @@ function initializeBookingModal() {
     bookingForm.addEventListener('submit', async function(e) {
         e.preventDefault();
         
+        const submitButton = document.getElementById('submitButton');
+        const submitButtonText = document.getElementById('submitButtonText');
+        const submitButtonLoading = document.getElementById('submitButtonLoading');
+        
         const formData = {
             guestName: document.getElementById('guestName').value.trim(),
             room: document.getElementById('roomSelect').value,
@@ -259,6 +265,11 @@ function initializeBookingModal() {
             showMessage('Check-out date must be after check-in date', 'error');
             return;
         }
+        
+        // Show loading state
+        submitButton.disabled = true;
+        submitButtonText.classList.add('hidden');
+        submitButtonLoading.classList.remove('hidden');
         
         // Submit booking
         try {
@@ -361,6 +372,11 @@ function initializeBookingModal() {
                 errorMsg = 'Network error: Could not connect to server. Please check your internet connection and ensure the Google Apps Script is deployed correctly.';
             }
             showMessage(errorMsg, 'error');
+        } finally {
+            // Hide loading state
+            submitButton.disabled = false;
+            submitButtonText.classList.remove('hidden');
+            submitButtonLoading.classList.add('hidden');
         }
     });
 }
@@ -375,6 +391,10 @@ function openBookingModal(dateStr, resourceId) {
     // Set default values
     if (dateStr) {
         startDateInput.value = dateStr;
+        // Set checkout date to day after checkin
+        const checkinDate = new Date(dateStr);
+        checkinDate.setDate(checkinDate.getDate() + 1);
+        endDateInput.value = checkinDate.toISOString().split('T')[0];
     }
     if (resourceId) {
         roomSelect.value = resourceId;
@@ -383,7 +403,11 @@ function openBookingModal(dateStr, resourceId) {
     // Set minimum dates
     const today = new Date().toISOString().split('T')[0];
     startDateInput.min = today;
-    endDateInput.min = today;
+    updateEndDateMin();
+    
+    // Update end date min when start date changes
+    startDateInput.removeEventListener('change', updateEndDateMin);
+    startDateInput.addEventListener('change', updateEndDateMin);
     
     bookingModal.classList.remove('hidden');
     
@@ -398,16 +422,142 @@ function openBookingModal(dateStr, resourceId) {
     }, 100);
 }
 
-// Show message toast
+// Update end date minimum based on start date
+function updateEndDateMin() {
+    const startDateInput = document.getElementById('startDate');
+    const endDateInput = document.getElementById('endDate');
+    
+    if (startDateInput.value) {
+        const checkinDate = new Date(startDateInput.value);
+        checkinDate.setDate(checkinDate.getDate() + 1);
+        endDateInput.min = checkinDate.toISOString().split('T')[0];
+        
+        // If current end date is before new min, update it
+        if (endDateInput.value && new Date(endDateInput.value) < checkinDate) {
+            endDateInput.value = checkinDate.toISOString().split('T')[0];
+        }
+    } else {
+        const today = new Date().toISOString().split('T')[0];
+        endDateInput.min = today;
+    }
+}
+
+// Render bookings list (current month to 12 months ahead)
+function renderBookingsList() {
+    const bookingsListContainer = document.getElementById('bookingsList');
+    if (!bookingsListContainer) return;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Start from the beginning of the current month
+    const startOfCurrentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    startOfCurrentMonth.setHours(0, 0, 0, 0);
+    
+    // Calculate date 12 months from the start of current month
+    const maxDate = new Date(startOfCurrentMonth);
+    maxDate.setMonth(maxDate.getMonth() + 12);
+    
+    // Filter bookings within the date range (from start of current month to 12 months ahead)
+    const upcomingBookings = bookings
+        .filter(booking => {
+            const startDate = new Date(booking.startDate);
+            startDate.setHours(0, 0, 0, 0);
+            return startDate >= startOfCurrentMonth && startDate <= maxDate;
+        })
+        .sort((a, b) => {
+            const dateA = new Date(a.startDate);
+            const dateB = new Date(b.startDate);
+            return dateA - dateB;
+        });
+    
+    if (upcomingBookings.length === 0) {
+        bookingsListContainer.innerHTML = '<p class="text-[#4a5568] text-center py-8">No upcoming bookings</p>';
+        return;
+    }
+    
+    // Format dates for display
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'];
+    
+    function formatDate(dateStr) {
+        const date = new Date(dateStr);
+        const month = monthNames[date.getMonth()];
+        const day = date.getDate();
+        const year = date.getFullYear();
+        return `${month} ${day}, ${year}`;
+    }
+    
+    let html = '';
+    upcomingBookings.forEach(booking => {
+        html += `
+            <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                    <div class="flex-1">
+                        <div class="font-semibold text-[#2d3748] mb-1">${escapeHtml(booking.guestName)}</div>
+                        <div class="text-sm text-[#4a5568]">
+                            <span class="font-medium">${booking.room} Room</span> • 
+                            ${formatDate(booking.startDate)} - ${formatDate(booking.endDate)}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    bookingsListContainer.innerHTML = html;
+}
+
+// Escape HTML to prevent XSS
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Initialize message modal close button
+function initializeMessageToast() {
+    const closeMessageModal = document.getElementById('closeMessageModal');
+    const messageModal = document.getElementById('messageModal');
+    
+    if (closeMessageModal) {
+        closeMessageModal.addEventListener('click', function() {
+            messageModal.classList.add('hidden');
+            document.body.style.overflow = '';
+        });
+    }
+    
+    // Prevent closing by clicking outside the modal
+    if (messageModal) {
+        messageModal.addEventListener('click', function(e) {
+            if (e.target === messageModal) {
+                // Don't close on backdrop click - require button click
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        });
+    }
+}
+
+// Show message modal (centered, blocks interactions until acknowledged)
 function showMessage(message, type = 'success') {
-    const messageToast = document.getElementById('messageToast');
+    const messageModal = document.getElementById('messageModal');
     const messageText = document.getElementById('messageText');
+    const messageIcon = document.getElementById('messageIcon');
     
     messageText.textContent = message;
     messageText.className = type === 'error' ? 'text-red-600' : 'text-green-600';
-    messageToast.classList.remove('hidden');
     
-    setTimeout(() => {
-        messageToast.classList.add('hidden');
-    }, 3000);
+    // Set icon
+    if (type === 'error') {
+        messageIcon.textContent = '✕';
+        messageIcon.className = 'mb-4 text-5xl text-red-600';
+    } else {
+        messageIcon.textContent = '✓';
+        messageIcon.className = 'mb-4 text-5xl text-green-600';
+    }
+    
+    messageModal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    // Don't auto-hide - user must click OK button
 }

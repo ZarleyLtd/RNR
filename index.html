@@ -19,6 +19,13 @@
         
         body {
             background-color: var(--cream-light);
+            background-image: 
+                linear-gradient(rgba(250, 249, 247, 0.85), rgba(250, 249, 247, 0.85)),
+                url('images/RNR.jpg');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            background-repeat: no-repeat;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             color: var(--slate-dark);
         }
@@ -324,7 +331,8 @@
         }
         
         @media (max-width: 768px) {
-            .modal-content {
+            /* Booking modal - bottom sheet style */
+            #bookingModal .modal-content {
                 position: fixed;
                 bottom: 0;
                 left: 0;
@@ -336,6 +344,16 @@
                 max-width: 100%;
                 overflow-y: auto;
                 -webkit-overflow-scrolling: touch;
+            }
+            
+            /* Password and message modals - centered */
+            #passwordOverlay .modal-content,
+            #messageModal .modal-content {
+                position: relative;
+                border-radius: 0.5rem;
+                padding: 1.5rem;
+                margin: 1rem;
+                max-width: calc(100% - 2rem);
             }
             
             #closeModal {
@@ -392,15 +410,6 @@
             }
         }
         
-        /* Toast message mobile positioning */
-        @media (max-width: 768px) {
-            #messageToast {
-                top: 1rem;
-                right: 1rem;
-                left: 1rem;
-                max-width: calc(100% - 2rem);
-            }
-        }
     </style>
 </head>
 <body class="min-h-screen bg-[#faf9f7]">
@@ -454,6 +463,16 @@
                     <div class="legend-item">
                         <div class="legend-dot booked"></div>
                         <span class="legend-text">Fully booked</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Bookings List -->
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 mt-6">
+                <div class="p-6">
+                    <h2 class="text-2xl font-semibold text-[#2d3748] mb-4">Upcoming Bookings</h2>
+                    <div id="bookingsList" class="space-y-4">
+                        <p class="text-[#4a5568] text-center py-8">Loading bookings...</p>
                     </div>
                 </div>
             </div>
@@ -533,17 +552,30 @@
                 
                 <button 
                     type="submit"
-                    class="w-full bg-[#4a5568] text-white py-3 rounded-lg font-medium hover:bg-[#2d3748] transition-colors"
+                    id="submitButton"
+                    class="w-full bg-[#4a5568] text-white py-3 rounded-lg font-medium hover:bg-[#2d3748] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    Book Stay
+                    <span id="submitButtonText">Book Stay</span>
+                    <span id="submitButtonLoading" class="hidden">Processing...</span>
                 </button>
             </form>
         </div>
     </div>
     
-    <!-- Success/Error Messages -->
-    <div id="messageToast" class="hidden fixed top-4 right-4 z-50 bg-white rounded-lg shadow-lg p-4 border border-gray-200">
-        <p id="messageText" class="text-[#2d3748]"></p>
+    <!-- Success/Error Messages Modal -->
+    <div id="messageModal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+        <div class="modal-content rounded-lg shadow-xl p-8 max-w-md w-full mx-4">
+            <div class="text-center">
+                <div id="messageIcon" class="mb-4 text-5xl"></div>
+                <p id="messageText" class="text-xl font-medium mb-6"></p>
+                <button 
+                    id="closeMessageModal"
+                    class="w-full bg-[#4a5568] text-white py-3 rounded-lg font-medium hover:bg-[#2d3748] transition-colors"
+                >
+                    OK
+                </button>
+            </div>
+        </div>
     </div>
     
     <script src="app.js"></script>
