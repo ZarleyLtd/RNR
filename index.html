@@ -180,6 +180,22 @@
             transform: scale(0.95);
         }
         
+        /* Date selection styles */
+        .calendar-day.selected,
+        .calendar-day.selected-start,
+        .calendar-day.selected-end {
+            background-color: #3b82f6;
+            color: white;
+            font-weight: 700;
+            border-color: #2563eb;
+        }
+        
+        .calendar-day.selected-range {
+            background-color: #dbeafe;
+            color: var(--slate-dark);
+            font-weight: 600;
+        }
+        
         /* Today indicator */
         .calendar-day.today {
             border-color: var(--slate-gray);
@@ -356,6 +372,16 @@
                 max-width: calc(100% - 2rem);
             }
             
+            /* Password modal - positioned higher on mobile to avoid keyboard */
+            #passwordOverlay {
+                align-items: flex-start;
+                padding-top: 10vh;
+            }
+            
+            #passwordOverlay .modal-content {
+                margin-top: 0;
+            }
+            
             #closeModal {
                 min-width: 44px;
                 min-height: 44px;
@@ -458,11 +484,27 @@
                     </div>
                     <div class="legend-item">
                         <div class="legend-dot partial"></div>
-                        <span class="legend-text">Some rooms booked</span>
+                        <span class="legend-text">Partly booked</span>
                     </div>
                     <div class="legend-item">
                         <div class="legend-dot booked"></div>
                         <span class="legend-text">Fully booked</span>
+                    </div>
+                </div>
+                
+                <!-- Date Selection Proceed Button -->
+                <div id="dateSelectionPanel" class="hidden border-t border-gray-200 p-4 bg-gray-50">
+                    <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div class="flex-1 text-center sm:text-left">
+                            <p id="nightsMessage" class="text-[#4a5568] font-medium"></p>
+                        </div>
+                        <button 
+                            id="proceedButton"
+                            class="w-full sm:w-auto px-6 py-3 bg-[#4a5568] text-white rounded-lg font-medium hover:bg-[#2d3748] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            disabled
+                        >
+                            Proceed
+                        </button>
                     </div>
                 </div>
             </div>
@@ -497,14 +539,22 @@
                     <label for="guestName" class="block text-sm font-medium text-[#4a5568] mb-2">
                         Guest Name
                     </label>
-                    <input 
-                        type="text" 
-                        id="guestName" 
-                        name="guestName"
-                        required
-                        class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4a5568]"
-                        placeholder="Enter guest name"
-                    />
+                    <div class="flex flex-row gap-2">
+                        <select 
+                            id="guestNameSelect" 
+                            class="flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4a5568] bg-white min-w-0"
+                        >
+                            <option value="">Select a guest name</option>
+                        </select>
+                        <input 
+                            type="text" 
+                            id="guestName" 
+                            name="guestName"
+                            required
+                            class="flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4a5568] min-w-0"
+                            placeholder="Or enter guest name manually"
+                        />
+                    </div>
                 </div>
                 
                 <div class="mb-4">
@@ -518,35 +568,38 @@
                         class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4a5568] bg-white"
                     >
                         <option value="">Select a room</option>
+                        <option value="Entire House">Entire House</option>
                         <option value="Master">Master</option>
                         <option value="Twin">Twin</option>
                         <option value="Bunk">Bunk</option>
                     </select>
                 </div>
                 
-                <div class="mb-4">
-                    <label for="startDate" class="block text-sm font-medium text-[#4a5568] mb-2">
-                        Check-in Date
-                    </label>
+                <div class="mb-6">
+                    <div class="w-full px-4 py-3 border rounded-lg bg-gray-50 text-[#2d3748]">
+                        <div class="flex items-start justify-between gap-4">
+                            <div class="flex flex-col">
+                                <span class="text-sm font-medium text-[#4a5568] mb-1">Check in</span>
+                                <span id="checkinDateDisplay" class="font-semibold text-[#2d3748]"></span>
+                            </div>
+                            <div class="flex flex-col">
+                                <span class="text-sm font-medium text-[#4a5568] mb-1">Check out</span>
+                                <span id="checkoutDateDisplay" class="font-semibold text-[#2d3748]"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Hidden inputs for form submission -->
                     <input 
-                        type="date" 
+                        type="hidden" 
                         id="startDate" 
                         name="startDate"
                         required
-                        class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4a5568]"
                     />
-                </div>
-                
-                <div class="mb-6">
-                    <label for="endDate" class="block text-sm font-medium text-[#4a5568] mb-2">
-                        Check-out Date
-                    </label>
                     <input 
-                        type="date" 
+                        type="hidden" 
                         id="endDate" 
                         name="endDate"
                         required
-                        class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#4a5568]"
                     />
                 </div>
                 

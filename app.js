@@ -15,12 +15,30 @@ const ROOMS = [
     { id: 'Bunk', title: 'Bunk Room' }
 ];
 
+// Guest names configuration
+const GUEST_NAMES = [
+    'Kevin',
+    'Maireadh',
+    'Niamh',
+    'David',
+    'Carol',
+    'John',
+    'Deirdre',
+    'Catherine'
+];
+
+// Date selection state
+let selectedCheckin = null;
+let selectedCheckout = null;
+
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
     initializePasswordCheck();
     initializeBookingModal();
     initializeCalendar();
     initializeMessageToast();
+    initializeGuestNameSelect();
+    initializeProceedButton();
     loadBookings();
 });
 
@@ -77,7 +95,7 @@ function renderCalendar() {
     let html = '';
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
         'July', 'August', 'September', 'October', 'November', 'December'];
-    const weekDays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+    const weekDays = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
     
     // Render 12 months: current month + next 11 months
     for (let monthOffset = 0; monthOffset < 12; monthOffset++) {
@@ -100,7 +118,10 @@ function renderCalendar() {
         html += '<div class="calendar-days-grid">';
         
         // Get first day of month and days in month
-        const firstDay = new Date(year, month, 1).getDay();
+        // Adjust for Monday-first week (0=Sunday, 1=Monday, etc.)
+        let firstDay = new Date(year, month, 1).getDay();
+        // Convert Sunday (0) to 6, Monday (1) to 0, etc.
+        firstDay = firstDay === 0 ? 6 : firstDay - 1;
         const daysInMonth = new Date(year, month + 1, 0).getDate();
         
         // Empty cells for days before month starts
@@ -130,13 +151,24 @@ function renderCalendar() {
     
     calendarContainer.innerHTML = html;
     
-    // Add click handlers to date cells
-    calendarContainer.querySelectorAll('.calendar-day:not(.empty):not(.booked)').forEach(cell => {
+    // Add click handlers to date cells for date selection
+    calendarContainer.querySelectorAll('.calendar-day:not(.empty)').forEach(cell => {
         cell.addEventListener('click', function() {
             const dateStr = this.getAttribute('data-date');
-            openBookingModal(dateStr, null);
+            const isBooked = this.classList.contains('booked');
+            
+            // Don't allow selecting a fully booked date as check-in
+            // But allow it as checkout (since that's the departure day)
+            if (isBooked && !selectedCheckin) {
+                return; // Can't select fully booked date as check-in
+            }
+            
+            handleDateSelection(dateStr);
         });
     });
+    
+    // Update calendar display for selected dates
+    updateCalendarSelection();
     
     // Scroll to current month on load
     const scrollContainer = document.querySelector('.calendar-scroll-container');
@@ -158,6 +190,26 @@ function getDateAvailability(dateStr) {
     
     const availableRooms = [];
     const bookedRooms = [];
+    let entireHouseBooked = false;
+    
+    // Check for entire house bookings first
+    entireHouseBooked = bookings.some(booking => {
+        if (booking.room !== 'Entire House') return false;
+        const bookingStart = new Date(booking.startDate);
+        const bookingEnd = new Date(booking.endDate);
+        bookingStart.setHours(0, 0, 0, 0);
+        bookingEnd.setHours(0, 0, 0, 0);
+        return date >= bookingStart && date < bookingEnd;
+    });
+    
+    if (entireHouseBooked) {
+        return {
+            status: 'booked',
+            availableRooms: [],
+            bookedRooms: ROOMS.map(r => r.id),
+            entireHouseBooked: true
+        };
+    }
     
     ROOMS.forEach(room => {
         // Check if this room is booked on this date
@@ -191,7 +243,8 @@ function getDateAvailability(dateStr) {
     return {
         status: status,
         availableRooms: availableRooms,
-        bookedRooms: bookedRooms
+        bookedRooms: bookedRooms,
+        entireHouseBooked: false
     };
 }
 
@@ -201,6 +254,20 @@ function isSameDay(date1, date2) {
     return date1.getFullYear() === date2.getFullYear() &&
            date1.getMonth() === date2.getMonth() &&
            date1.getDate() === date2.getDate();
+}
+
+// Format date for display (e.g., "Mon, 12 Jan 2026")
+function formatDateDisplay(date) {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    const d = new Date(date);
+    const dayName = days[d.getDay()];
+    const day = d.getDate();
+    const month = months[d.getMonth()];
+    const year = d.getFullYear();
+    
+    return `${dayName}, ${day} ${month} ${year}`;
 }
 
 
@@ -214,12 +281,59 @@ async function loadBookings() {
                 bookings = data.bookings;
                 renderCalendar();
                 renderBookingsList();
+                // Restore date selection visual state after re-render
+                if (selectedCheckin || selectedCheckout) {
+                    updateCalendarSelection();
+                    updateProceedButton();
+                }
             }
         }
     } catch (error) {
         console.error('Error loading bookings:', error);
         // Continue without bookings if API is not available
     }
+}
+
+// Initialize guest name select dropdown
+function initializeGuestNameSelect() {
+    const guestNameSelect = document.getElementById('guestNameSelect');
+    const guestNameInput = document.getElementById('guestName');
+    
+    if (!guestNameSelect || !guestNameInput) return;
+    
+    // Populate dropdown with guest names
+    GUEST_NAMES.forEach(name => {
+        const option = document.createElement('option');
+        option.value = name;
+        option.textContent = name;
+        guestNameSelect.appendChild(option);
+    });
+    
+    // When a name is selected, populate the input
+    guestNameSelect.addEventListener('change', function() {
+        if (this.value) {
+            guestNameInput.value = this.value;
+        }
+    });
+    
+    // When input is manually changed, sync with select
+    guestNameInput.addEventListener('input', function() {
+        if (GUEST_NAMES.includes(this.value)) {
+            guestNameSelect.value = this.value;
+        } else if (this.value) {
+            guestNameSelect.value = '';
+        }
+    });
+}
+
+// Initialize proceed button
+function initializeProceedButton() {
+    const proceedButton = document.getElementById('proceedButton');
+    if (!proceedButton) return;
+    
+    proceedButton.addEventListener('click', function() {
+        openBookingModal();
+    });
 }
 
 // Booking Modal Functions
@@ -232,6 +346,15 @@ function initializeBookingModal() {
         bookingModal.classList.add('hidden');
         bookingForm.reset();
         document.body.style.overflow = '';
+        // Reset date selection
+        selectedCheckin = null;
+        selectedCheckout = null;
+        updateCalendarSelection();
+        updateProceedButton();
+        const dateSelectionPanel = document.getElementById('dateSelectionPanel');
+        if (dateSelectionPanel) {
+            dateSelectionPanel.classList.add('hidden');
+        }
     });
     
     bookingModal.addEventListener('click', function(e) {
@@ -239,6 +362,15 @@ function initializeBookingModal() {
             bookingModal.classList.add('hidden');
             bookingForm.reset();
             document.body.style.overflow = '';
+            // Reset date selection
+            selectedCheckin = null;
+            selectedCheckout = null;
+            updateCalendarSelection();
+            updateProceedButton();
+            const dateSelectionPanel = document.getElementById('dateSelectionPanel');
+            if (dateSelectionPanel) {
+                dateSelectionPanel.classList.add('hidden');
+            }
         }
     });
     
@@ -343,6 +475,15 @@ function initializeBookingModal() {
                     bookingModal.classList.add('hidden');
                     bookingForm.reset();
                     document.body.style.overflow = '';
+                    // Reset date selection
+                    selectedCheckin = null;
+                    selectedCheckout = null;
+                    updateCalendarSelection();
+                    updateProceedButton();
+                    const dateSelectionPanel = document.getElementById('dateSelectionPanel');
+                    if (dateSelectionPanel) {
+                        dateSelectionPanel.classList.add('hidden');
+                    }
                     // Reload bookings to show the new one
                     loadBookings();
                 } else {
@@ -381,33 +522,250 @@ function initializeBookingModal() {
     });
 }
 
-// Open booking modal (can be called from onclick in mobile view)
-function openBookingModal(dateStr, resourceId) {
+// Check if any date in a range is fully booked (excluding checkout date)
+// Checkout date can be fully booked since that's the departure day
+function isDateRangeAvailable(checkin, checkout) {
+    if (!checkin || !checkout) return true;
+    
+    const start = new Date(checkin);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(checkout);
+    end.setHours(0, 0, 0, 0);
+    
+    // Check each date in the range (excluding checkout date itself)
+    // Checkout date can be fully booked since guests leave that day
+    const current = new Date(start);
+    while (current < end) {
+        const dateStr = current.toISOString().split('T')[0];
+        const availability = getDateAvailability(dateStr);
+        
+        // If any date (except checkout) is fully booked, the range is not available
+        if (availability.status === 'booked') {
+            return false;
+        }
+        
+        // Move to next day
+        current.setDate(current.getDate() + 1);
+    }
+    
+    return true;
+}
+
+// Get available rooms for a date range
+function getAvailableRoomsForDateRange(checkin, checkout) {
+    if (!checkin || !checkout) return [];
+    
+    const start = new Date(checkin);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(checkout);
+    end.setHours(0, 0, 0, 0);
+    
+    // Start with all rooms (including Entire House)
+    const allRooms = ['Entire House', ...ROOMS.map(r => r.id)];
+    const availableRooms = new Set(allRooms);
+    
+    // Check each date in the range (excluding checkout date)
+    const current = new Date(start);
+    while (current < end) {
+        const dateStr = current.toISOString().split('T')[0];
+        const availability = getDateAvailability(dateStr);
+        
+        // If entire house is booked on this date, remove it
+        if (availability.entireHouseBooked) {
+            availableRooms.delete('Entire House');
+        }
+        
+        // If any individual room is booked on this date, remove "Entire House" as well
+        // (can't book entire house if any part is already booked)
+        if (availability.bookedRooms.length > 0) {
+            availableRooms.delete('Entire House');
+        }
+        
+        // Remove any individual rooms that are booked on this date
+        availability.bookedRooms.forEach(roomId => {
+            availableRooms.delete(roomId);
+        });
+        
+        // Move to next day
+        current.setDate(current.getDate() + 1);
+    }
+    
+    // Return as array, with Entire House first if available
+    const result = [];
+    if (availableRooms.has('Entire House')) {
+        result.push('Entire House');
+    }
+    ROOMS.forEach(room => {
+        if (availableRooms.has(room.id)) {
+            result.push(room.id);
+        }
+    });
+    
+    return result;
+}
+
+// Handle date selection from calendar
+function handleDateSelection(dateStr) {
+    const date = new Date(dateStr);
+    date.setHours(0, 0, 0, 0);
+    
+    // Check if this date is fully booked
+    const availability = getDateAvailability(dateStr);
+    const isFullyBooked = availability.status === 'booked';
+    
+    // If no checkin selected, or if clicking a date before/equal to current checkin, set as checkin
+    if (!selectedCheckin || date <= selectedCheckin) {
+        // Don't allow selecting a fully booked date as check-in
+        if (isFullyBooked) {
+            showMessage('Cannot select a fully booked date as check-in date.', 'error');
+            return;
+        }
+        selectedCheckin = date;
+        selectedCheckout = null;
+    } else if (!selectedCheckout) {
+        // If checkin is selected, set as checkout (must be after checkin)
+        // Checkout date can be fully booked since that's the departure day
+        if (date > selectedCheckin) {
+            // Check if the date range is available (no fully booked dates in between)
+            // Note: checkout date itself can be fully booked
+            if (isDateRangeAvailable(selectedCheckin, date)) {
+                selectedCheckout = date;
+            } else {
+                // Show error message and don't set checkout
+                showMessage('Cannot select this date range. Some dates in between are fully booked.', 'error');
+                return;
+            }
+        }
+    } else {
+        // Both dates selected, start fresh with new checkin
+        // Don't allow selecting a fully booked date as check-in
+        if (isFullyBooked) {
+            showMessage('Cannot select a fully booked date as check-in date.', 'error');
+            return;
+        }
+        selectedCheckin = date;
+        selectedCheckout = null;
+    }
+    
+    updateCalendarSelection();
+    updateProceedButton();
+}
+
+// Update calendar visual selection
+function updateCalendarSelection() {
+    const calendarContainer = document.getElementById('calendarMonthsGrid');
+    if (!calendarContainer) return;
+    
+    // Remove previous selection classes
+    calendarContainer.querySelectorAll('.calendar-day').forEach(cell => {
+        cell.classList.remove('selected', 'selected-range', 'selected-start', 'selected-end');
+    });
+    
+    if (!selectedCheckin) return;
+    
+    const checkinStr = selectedCheckin.toISOString().split('T')[0];
+    const checkoutStr = selectedCheckout ? selectedCheckout.toISOString().split('T')[0] : null;
+    
+    calendarContainer.querySelectorAll('.calendar-day:not(.empty)').forEach(cell => {
+        const cellDateStr = cell.getAttribute('data-date');
+        if (!cellDateStr) return;
+        
+        const cellDate = new Date(cellDateStr);
+        cellDate.setHours(0, 0, 0, 0);
+        
+        if (cellDateStr === checkinStr) {
+            cell.classList.add('selected', 'selected-start');
+        } else if (checkoutStr && cellDateStr === checkoutStr) {
+            cell.classList.add('selected', 'selected-end');
+        } else if (checkoutStr && cellDate > selectedCheckin && cellDate < selectedCheckout) {
+            cell.classList.add('selected-range');
+        }
+    });
+}
+
+// Update proceed button visibility and nights count
+function updateProceedButton() {
+    const proceedButton = document.getElementById('proceedButton');
+    const nightsMessage = document.getElementById('nightsMessage');
+    const dateSelectionPanel = document.getElementById('dateSelectionPanel');
+    
+    if (!proceedButton) return;
+    
+    if (selectedCheckin && selectedCheckout) {
+        const nights = Math.ceil((selectedCheckout - selectedCheckin) / (1000 * 60 * 60 * 24));
+        proceedButton.disabled = false;
+        proceedButton.classList.remove('opacity-50', 'cursor-not-allowed');
+        if (nightsMessage) {
+            nightsMessage.textContent = `${nights} ${nights === 1 ? 'night' : 'nights'} selected`;
+            nightsMessage.classList.remove('hidden');
+        }
+        if (dateSelectionPanel) {
+            dateSelectionPanel.classList.remove('hidden');
+        }
+    } else {
+        proceedButton.disabled = true;
+        proceedButton.classList.add('opacity-50', 'cursor-not-allowed');
+        if (nightsMessage) {
+            nightsMessage.classList.add('hidden');
+        }
+        if (dateSelectionPanel && (!selectedCheckin || !selectedCheckout)) {
+            dateSelectionPanel.classList.add('hidden');
+        }
+    }
+}
+
+// Open booking modal with selected dates
+function openBookingModal() {
+    if (!selectedCheckin || !selectedCheckout) {
+        return;
+    }
+    
     const bookingModal = document.getElementById('bookingModal');
     const startDateInput = document.getElementById('startDate');
     const endDateInput = document.getElementById('endDate');
+    const checkinDateDisplay = document.getElementById('checkinDateDisplay');
+    const checkoutDateDisplay = document.getElementById('checkoutDateDisplay');
+    const guestNameSelect = document.getElementById('guestNameSelect');
+    const guestNameInput = document.getElementById('guestName');
     const roomSelect = document.getElementById('roomSelect');
     
-    // Set default values
-    if (dateStr) {
-        startDateInput.value = dateStr;
-        // Set checkout date to day after checkin
-        const checkinDate = new Date(dateStr);
-        checkinDate.setDate(checkinDate.getDate() + 1);
-        endDateInput.value = checkinDate.toISOString().split('T')[0];
+    // Set hidden date inputs for form submission
+    const checkinStr = selectedCheckin.toISOString().split('T')[0];
+    const checkoutStr = selectedCheckout.toISOString().split('T')[0];
+    startDateInput.value = checkinStr;
+    endDateInput.value = checkoutStr;
+    
+    // Display formatted dates
+    if (checkinDateDisplay) {
+        checkinDateDisplay.textContent = formatDateDisplay(selectedCheckin);
     }
-    if (resourceId) {
-        roomSelect.value = resourceId;
+    if (checkoutDateDisplay) {
+        checkoutDateDisplay.textContent = formatDateDisplay(selectedCheckout);
     }
     
-    // Set minimum dates
-    const today = new Date().toISOString().split('T')[0];
-    startDateInput.min = today;
-    updateEndDateMin();
+    // Update room select to only show available rooms
+    if (roomSelect) {
+        // Get available rooms for the selected date range
+        const availableRooms = getAvailableRoomsForDateRange(selectedCheckin, selectedCheckout);
+        
+        // Clear existing options (except the first "Select a room" option)
+        roomSelect.innerHTML = '<option value="">Select a room</option>';
+        
+        // Add available rooms
+        availableRooms.forEach(roomId => {
+            const option = document.createElement('option');
+            option.value = roomId;
+            option.textContent = roomId === 'Entire House' ? 'Entire House' : roomId;
+            roomSelect.appendChild(option);
+        });
+        
+        // Reset selection
+        roomSelect.value = '';
+    }
     
-    // Update end date min when start date changes
-    startDateInput.removeEventListener('change', updateEndDateMin);
-    startDateInput.addEventListener('change', updateEndDateMin);
+    // Reset guest name fields
+    if (guestNameSelect) guestNameSelect.value = '';
+    if (guestNameInput) guestNameInput.value = '';
     
     bookingModal.classList.remove('hidden');
     
@@ -418,7 +776,11 @@ function openBookingModal(dateStr, resourceId) {
     
     // Small delay for focus on mobile
     setTimeout(() => {
-        document.getElementById('guestName').focus();
+        if (guestNameSelect) {
+            guestNameSelect.focus();
+        } else if (guestNameInput) {
+            guestNameInput.focus();
+        }
     }, 100);
 }
 

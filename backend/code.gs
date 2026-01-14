@@ -104,7 +104,7 @@ function doPost(e) {
     }
     
     // Validate room
-    const validRooms = ['Master', 'Twin', 'Bunk'];
+    const validRooms = ['Entire House', 'Master', 'Twin', 'Bunk'];
     if (!validRooms.includes(postData.room)) {
       return ContentService
         .createTextOutput(JSON.stringify({
@@ -117,10 +117,13 @@ function doPost(e) {
     // Check for date conflicts (optional validation)
     const hasConflict = checkBookingConflict(sheet, postData.room, postData.startDate, postData.endDate);
     if (hasConflict) {
+      const conflictMessage = postData.room === 'Entire House' 
+        ? 'The entire house is already booked for the selected dates'
+        : 'This room is already booked for the selected dates';
       return ContentService
         .createTextOutput(JSON.stringify({
           success: false,
-          message: 'This room is already booked for the selected dates'
+          message: conflictMessage
         }))
         .setMimeType(ContentService.MimeType.JSON);
     }
@@ -183,16 +186,33 @@ function checkBookingConflict(sheet, room, startDate, endDate) {
   
   const newStart = new Date(startDate);
   const newEnd = new Date(endDate);
+  const allRooms = ['Master', 'Twin', 'Bunk'];
   
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-    if (row[0] === '' || row[1] !== room) continue; // Skip empty rows or different rooms
+    if (row[0] === '') continue; // Skip empty rows
     
+    const existingRoom = row[1];
     const existingStart = new Date(row[2]);
     const existingEnd = new Date(row[3]);
     
     // Check for overlap: new booking overlaps if it starts before existing ends and ends after existing starts
-    if (newStart < existingEnd && newEnd > existingStart) {
+    const datesOverlap = newStart < existingEnd && newEnd > existingStart;
+    
+    if (!datesOverlap) continue; // No date overlap, skip
+    
+    // If booking "Entire House", conflict with any existing booking
+    if (room === 'Entire House') {
+      return true; // Conflict found
+    }
+    
+    // If existing booking is "Entire House", conflict with any new booking
+    if (existingRoom === 'Entire House') {
+      return true; // Conflict found
+    }
+    
+    // If same room, conflict
+    if (existingRoom === room) {
       return true; // Conflict found
     }
   }
