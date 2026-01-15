@@ -487,6 +487,23 @@
         }
         
     </style>
+    <!-- Immediate session check to prevent password overlay flash -->
+    <script>
+        // Check sessionStorage immediately to hide password overlay if valid session exists
+        (function() {
+            const storedPassword = sessionStorage.getItem('familyAccess');
+            // Default passwords (will be validated against actual passwords after settings load)
+            const defaultFamilyPassword = 'rnr';
+            const defaultAdminPassword = 'rnrAdmin';
+            
+            if (storedPassword && (storedPassword === defaultFamilyPassword || storedPassword === defaultAdminPassword)) {
+                // Add inline style to hide overlay immediately
+                var style = document.createElement('style');
+                style.textContent = '#passwordOverlay { display: none !important; } #mainContent { display: block !important; }';
+                document.head.appendChild(style);
+            }
+        })();
+    </script>
 </head>
     <body class="min-h-screen bg-[#e0f2fe]">
     <!-- Password Overlay -->
