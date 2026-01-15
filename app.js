@@ -1,5 +1,6 @@
-// Family Access Password (Change this to your desired password)
-const FAMILY_PASSWORD = 'rnr';
+// Default passwords (will be overridden by settings from backend)
+let FAMILY_PASSWORD = 'rnr';
+let ADMIN_PASSWORD = 'rnrAdmin';
 
 // Placeholder API URL - Replace with your Google Apps Script Web App URL
 const API_URL = 'https://script.google.com/macros/s/AKfycbyenccYwHjyj6bRS3QWjq_0Ve_rVOTEwIb6xCm-pYPWorb0JxsJxqoDfsXpioqNvtOb/exec';
@@ -31,16 +32,47 @@ const GUEST_NAMES = [
 let selectedCheckin = null;
 let selectedCheckout = null;
 
+// Activity log storage (in-memory, could be extended to use localStorage or API)
+let activityLog = [];
+
+// Current booking being edited
+let currentEditingBooking = null;
+
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
-    initializePasswordCheck();
-    initializeBookingModal();
-    initializeCalendar();
-    initializeMessageToast();
-    initializeGuestNameSelect();
-    initializeProceedButton();
-    loadBookings();
+    // Load settings first, then initialize password check
+    loadSettings().then(() => {
+        initializePasswordCheck();
+        initializeBookingModal();
+        initializeCalendar();
+        initializeMessageToast();
+        initializeGuestNameSelect();
+        initializeProceedButton();
+        initializePinVerificationModal();
+        initializeEditBookingModal();
+        initializeActivityLogModal();
+        loadBookings();
+        loadActivityLog();
+        updateActivityLogButtonVisibility();
+    });
 });
+
+// Load settings from backend
+async function loadSettings() {
+    try {
+        const response = await fetch(`${API_URL}?action=settings`);
+        if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.settings) {
+                FAMILY_PASSWORD = data.settings['Family Password'] || 'rnr';
+                ADMIN_PASSWORD = data.settings['Admin Password'] || 'rnrAdmin';
+            }
+        }
+    } catch (error) {
+        console.warn('Could not load settings from backend, using defaults:', error);
+        // Continue with default passwords
+    }
+}
 
 // Password Check
 function initializePasswordCheck() {
@@ -50,21 +82,54 @@ function initializePasswordCheck() {
     const passwordError = document.getElementById('passwordError');
     const mainContent = document.getElementById('mainContent');
     
-    // Check if password is already stored
+    // Check if password is already stored and valid
     const storedPassword = sessionStorage.getItem('familyAccess');
-    if (storedPassword === FAMILY_PASSWORD) {
-        passwordOverlay.classList.add('hidden');
-        mainContent.classList.remove('hidden');
-        return;
+    const storedAdminStatus = sessionStorage.getItem('isAdmin') === 'true';
+    
+    // Validate stored password against current settings
+    if (storedPassword) {
+        if (storedPassword === FAMILY_PASSWORD) {
+            // Valid family password
+            passwordOverlay.classList.add('hidden');
+            mainContent.classList.remove('hidden');
+            updateActivityLogButtonVisibility();
+            return;
+        } else if (storedPassword === ADMIN_PASSWORD && storedAdminStatus) {
+            // Valid admin password
+            passwordOverlay.classList.add('hidden');
+            mainContent.classList.remove('hidden');
+            updateActivityLogButtonVisibility();
+            return;
+        } else {
+            // Stored password no longer valid (settings changed), clear it
+            sessionStorage.removeItem('familyAccess');
+            sessionStorage.removeItem('isAdmin');
+        }
     }
     
     passwordSubmit.addEventListener('click', function() {
         const inputPassword = passwordInput.value.trim();
-        if (inputPassword === FAMILY_PASSWORD) {
-            sessionStorage.setItem('familyAccess', FAMILY_PASSWORD);
+        let isAdmin = false;
+        let isValidPassword = false;
+        
+        // Check if it's the admin password
+        if (inputPassword === ADMIN_PASSWORD) {
+            isAdmin = true;
+            isValidPassword = true;
+        } 
+        // Check if it's the family password
+        else if (inputPassword === FAMILY_PASSWORD) {
+            isAdmin = false;
+            isValidPassword = true;
+        }
+        
+        if (isValidPassword) {
+            sessionStorage.setItem('familyAccess', inputPassword);
+            sessionStorage.setItem('isAdmin', isAdmin.toString());
             passwordOverlay.classList.add('hidden');
             mainContent.classList.remove('hidden');
             passwordError.classList.add('hidden');
+            updateActivityLogButtonVisibility();
         } else {
             passwordError.classList.remove('hidden');
             passwordInput.value = '';
@@ -77,6 +142,23 @@ function initializePasswordCheck() {
             passwordSubmit.click();
         }
     });
+}
+
+// Check if current user is admin
+function isAdmin() {
+    return sessionStorage.getItem('isAdmin') === 'true';
+}
+
+// Update activity log button visibility based on admin status
+function updateActivityLogButtonVisibility() {
+    const viewActivityLogButton = document.getElementById('viewActivityLogButton');
+    if (viewActivityLogButton) {
+        if (isAdmin()) {
+            viewActivityLogButton.classList.remove('hidden');
+        } else {
+            viewActivityLogButton.classList.add('hidden');
+        }
+    }
 }
 
 // Initialize custom calendar
@@ -385,7 +467,9 @@ function initializeBookingModal() {
             guestName: document.getElementById('guestName').value.trim(),
             room: document.getElementById('roomSelect').value,
             startDate: document.getElementById('startDate').value,
-            endDate: document.getElementById('endDate').value
+            endDate: document.getElementById('endDate').value,
+            notes: document.getElementById('bookingNotes').value.trim(),
+            pin: normalizePin(document.getElementById('bookingPin').value) // Normalize PIN when creating
         };
         
         // #region agent log
@@ -412,10 +496,13 @@ function initializeBookingModal() {
             // Use URL-encoded form data to avoid CORS preflight issues
             // Google Apps Script Web Apps handle form data better than JSON POST
             const formBody = new URLSearchParams();
+            formBody.append('action', 'create');
             formBody.append('guestName', formData.guestName);
             formBody.append('room', formData.room);
             formBody.append('startDate', formData.startDate);
             formBody.append('endDate', formData.endDate);
+            formBody.append('notes', formData.notes);
+            formBody.append('pin', formData.pin);
             
             // #region agent log
             fetch('http://127.0.0.1:7244/ingest/6c453964-aada-481a-b699-6260cc2ff3aa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:271',message:'Using form-urlencoded to avoid CORS',data:{formBody:formBody.toString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run4',hypothesisId:'A'})}).catch(()=>{});
@@ -470,6 +557,15 @@ function initializeBookingModal() {
                     // #region agent log
                     fetch('http://127.0.0.1:7244/ingest/6c453964-aada-481a-b699-6260cc2ff3aa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:294',message:'Booking success',data:{result:result},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
                     // #endregion
+                    
+                    // Log activity
+                    logActivity('create', {
+                        guestName: formData.guestName,
+                        room: formData.room,
+                        startDate: formData.startDate,
+                        endDate: formData.endDate,
+                        notes: formData.notes
+                    }, result.bookingId);
                     
                     showMessage('Booking successfully created!', 'success');
                     bookingModal.classList.add('hidden');
@@ -864,8 +960,9 @@ function renderBookingsList() {
     let html = '';
     upcomingBookings.forEach(booking => {
         const roomIcon = getRoomIcon(booking.room);
+        const bookingId = booking.id || booking.rowId || JSON.stringify(booking);
         html += `
-            <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
+            <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors cursor-pointer booking-item" data-booking-id="${escapeHtml(bookingId)}">
                 <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                     <div class="flex-1 flex items-start gap-3">
                         <span class="text-2xl flex-shrink-0">${roomIcon}</span>
@@ -875,14 +972,30 @@ function renderBookingsList() {
                                 <span class="font-medium">${booking.room} Room</span> • 
                                 ${formatDate(booking.startDate)} - ${formatDate(booking.endDate)}
                             </div>
+                            ${booking.notes ? `<div class="text-xs text-[#64748b] mt-1 italic">${escapeHtml(booking.notes)}</div>` : ''}
                         </div>
                     </div>
+                    <div class="text-xs text-[#64748b] md:ml-4">Click to edit/delete</div>
                 </div>
             </div>
         `;
     });
     
     bookingsListContainer.innerHTML = html;
+    
+    // Add click handlers to booking items
+    bookingsListContainer.querySelectorAll('.booking-item').forEach(item => {
+        item.addEventListener('click', function() {
+            const bookingId = this.getAttribute('data-booking-id');
+            const booking = upcomingBookings.find(b => {
+                const bId = b.id || b.rowId || JSON.stringify(b);
+                return String(bId) === String(bookingId);
+            });
+            if (booking) {
+                openPinVerificationModal(booking);
+            }
+        });
+    });
 }
 
 // Escape HTML to prevent XSS
@@ -922,6 +1035,22 @@ function showMessage(message, type = 'success') {
     const messageText = document.getElementById('messageText');
     const messageIcon = document.getElementById('messageIcon');
     
+    // Close any other open modals to ensure error message is visible
+    if (type === 'error') {
+        const editModal = document.getElementById('editBookingModal');
+        const pinModal = document.getElementById('pinVerificationModal');
+        const bookingModal = document.getElementById('bookingModal');
+        if (editModal && !editModal.classList.contains('hidden')) {
+            editModal.classList.add('hidden');
+        }
+        if (pinModal && !pinModal.classList.contains('hidden')) {
+            pinModal.classList.add('hidden');
+        }
+        if (bookingModal && !bookingModal.classList.contains('hidden')) {
+            bookingModal.classList.add('hidden');
+        }
+    }
+    
     messageText.textContent = message;
     messageText.className = type === 'error' ? 'text-red-600' : 'text-green-600';
     
@@ -937,4 +1066,560 @@ function showMessage(message, type = 'success') {
     messageModal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
     // Don't auto-hide - user must click OK button
+}
+
+// Initialize PIN verification modal
+function initializePinVerificationModal() {
+    const pinModal = document.getElementById('pinVerificationModal');
+    const closePinModal = document.getElementById('closePinModal');
+    const cancelPinButton = document.getElementById('cancelPinButton');
+    const verifyPinButton = document.getElementById('verifyPinButton');
+    const pinInput = document.getElementById('pinInput');
+    const pinError = document.getElementById('pinError');
+    
+    if (!pinModal) return;
+    
+    const closeModal = () => {
+        pinModal.classList.add('hidden');
+        pinInput.value = '';
+        pinError.classList.add('hidden');
+        document.body.style.overflow = '';
+        currentEditingBooking = null;
+    };
+    
+    if (closePinModal) {
+        closePinModal.addEventListener('click', closeModal);
+    }
+    
+    if (cancelPinButton) {
+        cancelPinButton.addEventListener('click', closeModal);
+    }
+    
+    if (verifyPinButton) {
+        verifyPinButton.addEventListener('click', function() {
+            verifyPinCode();
+        });
+    }
+    
+    if (pinInput) {
+        pinInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                verifyPinCode();
+            }
+        });
+    }
+    
+    pinModal.addEventListener('click', function(e) {
+        if (e.target === pinModal) {
+            closeModal();
+        }
+    });
+}
+
+// Open PIN verification modal
+function openPinVerificationModal(booking) {
+    currentEditingBooking = booking;
+    
+    // Skip PIN verification if user is admin
+    if (isAdmin()) {
+        openEditBookingModal(booking);
+        return;
+    }
+    
+    const pinModal = document.getElementById('pinVerificationModal');
+    const pinInput = document.getElementById('pinInput');
+    const pinError = document.getElementById('pinError');
+    
+    if (!pinModal) return;
+    
+    pinInput.value = '';
+    pinError.classList.add('hidden');
+    pinModal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    
+    setTimeout(() => {
+        if (pinInput) pinInput.focus();
+    }, 100);
+}
+
+// Normalize PIN: handle all whitespace characters and sequences
+function normalizePin(pin) {
+    if (!pin) return '';
+    // Convert to string, replace all whitespace sequences (spaces, tabs, newlines, etc.) with single space, then trim
+    return String(pin).replace(/\s+/g, ' ').trim();
+}
+
+// Verify PIN code
+function verifyPinCode() {
+    const pinInput = document.getElementById('pinInput');
+    const pinError = document.getElementById('pinError');
+    const pinModal = document.getElementById('pinVerificationModal');
+    
+    if (!currentEditingBooking || !pinInput) return;
+    
+    // Normalize both PINs: handle all whitespace characters and sequences
+    const enteredPin = normalizePin(pinInput.value);
+    const bookingPin = normalizePin(currentEditingBooking.pin);
+    
+    // Compare normalized PINs
+    if (enteredPin === bookingPin && enteredPin !== '') {
+        pinModal.classList.add('hidden');
+        document.body.style.overflow = '';
+        openEditBookingModal(currentEditingBooking);
+    } else {
+        pinError.classList.remove('hidden');
+        pinInput.value = '';
+        pinInput.focus();
+    }
+}
+
+// Initialize edit booking modal
+function initializeEditBookingModal() {
+    const editModal = document.getElementById('editBookingModal');
+    const closeEditModal = document.getElementById('closeEditModal');
+    const editForm = document.getElementById('editBookingForm');
+    const deleteButton = document.getElementById('deleteBookingButton');
+    
+    if (!editModal) return;
+    
+    const closeModal = () => {
+        editModal.classList.add('hidden');
+        editForm.reset();
+        document.body.style.overflow = '';
+        currentEditingBooking = null;
+    };
+    
+    if (closeEditModal) {
+        closeEditModal.addEventListener('click', closeModal);
+    }
+    
+    if (editForm) {
+        editForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            await updateBooking();
+        });
+    }
+    
+    if (deleteButton) {
+        deleteButton.addEventListener('click', function() {
+            if (confirm('Are you sure you want to delete this booking? This action cannot be undone.')) {
+                deleteBooking();
+            }
+        });
+    }
+    
+    editModal.addEventListener('click', function(e) {
+        if (e.target === editModal) {
+            closeModal();
+        }
+    });
+    
+    // Initialize guest name select for edit modal
+    const editGuestNameSelect = document.getElementById('editGuestNameSelect');
+    const editGuestNameInput = document.getElementById('editGuestName');
+    
+    if (editGuestNameSelect && editGuestNameInput) {
+        GUEST_NAMES.forEach(name => {
+            const option = document.createElement('option');
+            option.value = name;
+            option.textContent = name;
+            editGuestNameSelect.appendChild(option);
+        });
+        
+        editGuestNameSelect.addEventListener('change', function() {
+            if (this.value) {
+                editGuestNameInput.value = this.value;
+            }
+        });
+        
+        editGuestNameInput.addEventListener('input', function() {
+            if (GUEST_NAMES.includes(this.value)) {
+                editGuestNameSelect.value = this.value;
+            } else if (this.value) {
+                editGuestNameSelect.value = '';
+            }
+        });
+    }
+}
+
+// Open edit booking modal
+function openEditBookingModal(booking) {
+    currentEditingBooking = booking;
+    const editModal = document.getElementById('editBookingModal');
+    const editGuestName = document.getElementById('editGuestName');
+    const editGuestNameSelect = document.getElementById('editGuestNameSelect');
+    const editRoomSelect = document.getElementById('editRoomSelect');
+    const editStartDate = document.getElementById('editStartDate');
+    const editEndDate = document.getElementById('editEndDate');
+    const editBookingNotes = document.getElementById('editBookingNotes');
+    
+    if (!editModal || !booking) return;
+    
+    // Populate form fields
+    if (editGuestName) editGuestName.value = booking.guestName || '';
+    if (editGuestNameSelect) {
+        editGuestNameSelect.value = GUEST_NAMES.includes(booking.guestName) ? booking.guestName : '';
+    }
+    if (editRoomSelect) editRoomSelect.value = booking.room || '';
+    if (editStartDate) editStartDate.value = booking.startDate || '';
+    if (editEndDate) editEndDate.value = booking.endDate || '';
+    if (editBookingNotes) editBookingNotes.value = booking.notes || '';
+    
+    // Set minimum dates
+    const today = new Date().toISOString().split('T')[0];
+    if (editStartDate) editStartDate.min = today;
+    if (editEndDate) editEndDate.min = today;
+    
+    editModal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+// Update booking
+async function updateBooking() {
+    if (!currentEditingBooking) return;
+    
+    const updateButton = document.getElementById('updateBookingButton');
+    const updateButtonText = document.getElementById('updateButtonText');
+    const updateButtonLoading = document.getElementById('updateButtonLoading');
+    const editModal = document.getElementById('editBookingModal');
+    
+    const formData = {
+        bookingId: currentEditingBooking.id || currentEditingBooking.rowId,
+        guestName: document.getElementById('editGuestName').value.trim(),
+        room: document.getElementById('editRoomSelect').value,
+        startDate: document.getElementById('editStartDate').value,
+        endDate: document.getElementById('editEndDate').value,
+        notes: document.getElementById('editBookingNotes').value.trim()
+    };
+    
+    // Validate dates
+    if (new Date(formData.startDate) >= new Date(formData.endDate)) {
+        showMessage('Check-out date must be after check-in date', 'error');
+        return;
+    }
+    
+    // Show loading state
+    updateButton.disabled = true;
+    updateButtonText.classList.add('hidden');
+    updateButtonLoading.classList.remove('hidden');
+    
+    try {
+        const formBody = new URLSearchParams();
+        formBody.append('action', 'update');
+        formBody.append('bookingId', formData.bookingId);
+        formBody.append('guestName', formData.guestName);
+        formBody.append('room', formData.room);
+        formBody.append('startDate', formData.startDate);
+        formBody.append('endDate', formData.endDate);
+        formBody.append('notes', formData.notes);
+        
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            mode: 'cors',
+            redirect: 'follow',
+            credentials: 'omit',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: formBody.toString()
+        });
+        
+        if (response.ok) {
+            const responseText = await response.text();
+            const result = JSON.parse(responseText);
+            
+            if (result.success) {
+                // Log activity
+                logActivity('update', {
+                    old: {
+                        guestName: currentEditingBooking.guestName,
+                        room: currentEditingBooking.room,
+                        startDate: currentEditingBooking.startDate,
+                        endDate: currentEditingBooking.endDate,
+                        notes: currentEditingBooking.notes
+                    },
+                    new: formData
+                }, formData.bookingId);
+                
+                showMessage('Booking successfully updated!', 'success');
+                editModal.classList.add('hidden');
+                document.body.style.overflow = '';
+                currentEditingBooking = null;
+                loadBookings();
+            } else {
+                // Close edit modal first so error message is visible
+                editModal.classList.add('hidden');
+                showMessage(result.message || 'Failed to update booking', 'error');
+            }
+        } else {
+            showMessage('Error connecting to server', 'error');
+        }
+    } catch (error) {
+        console.error('Error updating booking:', error);
+        showMessage('Error updating booking. Please try again.', 'error');
+    } finally {
+        updateButton.disabled = false;
+        updateButtonText.classList.remove('hidden');
+        updateButtonLoading.classList.add('hidden');
+    }
+}
+
+// Delete booking
+async function deleteBooking() {
+    if (!currentEditingBooking) return;
+    
+    const deleteButton = document.getElementById('deleteBookingButton');
+    const editModal = document.getElementById('editBookingModal');
+    
+    if (!deleteButton) {
+        console.error('Delete button not found');
+        return;
+    }
+    
+    const bookingId = currentEditingBooking.id || currentEditingBooking.rowId;
+    if (!bookingId) {
+        showMessage('Invalid booking ID', 'error');
+        return;
+    }
+    
+    const bookingData = {
+        guestName: currentEditingBooking.guestName,
+        room: currentEditingBooking.room,
+        startDate: currentEditingBooking.startDate,
+        endDate: currentEditingBooking.endDate,
+        notes: currentEditingBooking.notes
+    };
+    
+    // Store original button content
+    const originalButtonText = deleteButton.textContent || 'Delete Booking';
+    deleteButton.disabled = true;
+    deleteButton.textContent = 'Deleting...';
+    
+    try {
+        const formBody = new URLSearchParams();
+        formBody.append('action', 'delete');
+        formBody.append('bookingId', String(bookingId));
+        
+        const response = await fetch(API_URL, {
+            method: 'POST',
+            mode: 'cors',
+            redirect: 'follow',
+            credentials: 'omit',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: formBody.toString()
+        });
+        
+        if (response.ok) {
+            const responseText = await response.text();
+            let result;
+            try {
+                result = JSON.parse(responseText);
+            } catch (parseError) {
+                console.error('Error parsing delete response:', parseError);
+                throw new Error('Invalid response from server');
+            }
+            
+            if (result.success) {
+                // Log activity
+                logActivity('delete', bookingData, bookingId);
+                
+                showMessage('Booking successfully deleted!', 'success');
+                if (editModal) {
+                    editModal.classList.add('hidden');
+                }
+                document.body.style.overflow = '';
+                currentEditingBooking = null;
+                loadBookings();
+            } else {
+                showMessage(result.message || 'Failed to delete booking', 'error');
+            }
+        } else {
+            const errorText = await response.text().catch(() => 'Unknown error');
+            console.error('Delete request failed:', response.status, errorText);
+            showMessage('Error connecting to server', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting booking:', error);
+        showMessage('Error deleting booking. Please try again.', 'error');
+    } finally {
+        // Always reset button state, even if there was an error
+        if (deleteButton) {
+            deleteButton.disabled = false;
+            deleteButton.textContent = originalButtonText;
+        }
+    }
+}
+
+// Activity logging functions
+function logActivity(action, data, bookingId) {
+    const timestamp = new Date().toISOString();
+    const userAgent = navigator.userAgent;
+    const sessionId = sessionStorage.getItem('familyAccess') || 'unknown';
+    
+    // Try to get IP (won't work client-side, but structure is ready for backend)
+    const activity = {
+        id: Date.now(),
+        timestamp: timestamp,
+        action: action, // 'create', 'update', 'delete'
+        bookingId: bookingId,
+        data: data,
+        sessionInfo: {
+            sessionId: sessionId,
+            userAgent: userAgent,
+            language: navigator.language,
+            platform: navigator.platform,
+            screenResolution: `${window.screen.width}x${window.screen.height}`
+        }
+    };
+    
+    activityLog.unshift(activity); // Add to beginning
+    
+    // Keep only last 1000 entries
+    if (activityLog.length > 1000) {
+        activityLog = activityLog.slice(0, 1000);
+    }
+    
+    // Save to localStorage
+    try {
+        localStorage.setItem('bookingActivityLog', JSON.stringify(activityLog));
+    } catch (e) {
+        console.warn('Could not save activity log to localStorage:', e);
+    }
+    
+    // Also try to send to API if available
+    try {
+        const formBody = new URLSearchParams();
+        formBody.append('action', 'logActivity');
+        formBody.append('activity', JSON.stringify(activity));
+        
+        fetch(API_URL, {
+            method: 'POST',
+            mode: 'cors',
+            redirect: 'follow',
+            credentials: 'omit',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: formBody.toString()
+        }).catch(() => {
+            // Silently fail if API is not available
+        });
+    } catch (e) {
+        // Silently fail
+    }
+}
+
+// Load activity log
+function loadActivityLog() {
+    try {
+        const stored = localStorage.getItem('bookingActivityLog');
+        if (stored) {
+            activityLog = JSON.parse(stored);
+        }
+    } catch (e) {
+        console.warn('Could not load activity log from localStorage:', e);
+        activityLog = [];
+    }
+}
+
+// Initialize activity log modal
+function initializeActivityLogModal() {
+    const activityLogModal = document.getElementById('activityLogModal');
+    const closeActivityLogModal = document.getElementById('closeActivityLogModal');
+    const viewActivityLogButton = document.getElementById('viewActivityLogButton');
+    
+    if (!activityLogModal) return;
+    
+    const closeModal = () => {
+        activityLogModal.classList.add('hidden');
+        document.body.style.overflow = '';
+    };
+    
+    if (closeActivityLogModal) {
+        closeActivityLogModal.addEventListener('click', closeModal);
+    }
+    
+    if (viewActivityLogButton) {
+        viewActivityLogButton.addEventListener('click', function() {
+            renderActivityLog();
+            activityLogModal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        });
+    }
+    
+    activityLogModal.addEventListener('click', function(e) {
+        if (e.target === activityLogModal) {
+            closeModal();
+        }
+    });
+}
+
+// Render activity log
+function renderActivityLog() {
+    const activityLogContent = document.getElementById('activityLogContent');
+    if (!activityLogContent) return;
+    
+    if (activityLog.length === 0) {
+        activityLogContent.innerHTML = '<p class="text-[#4a5568] text-center py-8">No activity recorded yet.</p>';
+        return;
+    }
+    
+    let html = '';
+    activityLog.forEach(activity => {
+        const date = new Date(activity.timestamp);
+        const dateStr = date.toLocaleString();
+        
+        let actionText = '';
+        let actionColor = '';
+        let actionIcon = '';
+        
+        switch (activity.action) {
+            case 'create':
+                actionText = 'Created';
+                actionColor = 'text-green-600 bg-green-50';
+                actionIcon = '✓';
+                break;
+            case 'update':
+                actionText = 'Updated';
+                actionColor = 'text-blue-600 bg-blue-50';
+                actionIcon = '✎';
+                break;
+            case 'delete':
+                actionText = 'Deleted';
+                actionColor = 'text-red-600 bg-red-50';
+                actionIcon = '✕';
+                break;
+        }
+        
+        html += `
+            <div class="border border-gray-200 rounded-lg p-4">
+                <div class="flex items-start justify-between gap-4 mb-2">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xl">${actionIcon}</span>
+                        <span class="px-2 py-1 rounded text-xs font-medium ${actionColor}">${actionText}</span>
+                    </div>
+                    <span class="text-xs text-[#64748b]">${dateStr}</span>
+                </div>
+                <div class="text-sm text-[#475569] mt-2">
+                    ${activity.action === 'update' ? 
+                        `<div><strong>Old:</strong> ${escapeHtml(activity.data.old.guestName)} - ${escapeHtml(activity.data.old.room)} (${formatDateDisplay(activity.data.old.startDate)} to ${formatDateDisplay(activity.data.old.endDate)})</div>
+                         <div class="mt-1"><strong>New:</strong> ${escapeHtml(activity.data.new.guestName)} - ${escapeHtml(activity.data.new.room)} (${formatDateDisplay(activity.data.new.startDate)} to ${formatDateDisplay(activity.data.new.endDate)})</div>` :
+                        `<div><strong>Guest:</strong> ${escapeHtml(activity.data.guestName || 'N/A')}</div>
+                         <div><strong>Room:</strong> ${escapeHtml(activity.data.room || 'N/A')}</div>
+                         <div><strong>Dates:</strong> ${formatDateDisplay(activity.data.startDate || activity.data.old?.startDate)} to ${formatDateDisplay(activity.data.endDate || activity.data.old?.endDate)}</div>`
+                    }
+                    ${(activity.data.notes || activity.data.old?.notes) ? `<div class="mt-1 italic text-xs">Notes: ${escapeHtml(activity.data.notes || activity.data.old?.notes || '')}</div>` : ''}
+                </div>
+                <div class="text-xs text-[#94a3b8] mt-2 pt-2 border-t border-gray-100">
+                    Session: ${escapeHtml(activity.sessionInfo.sessionId.substring(0, 8))}... | 
+                    ${escapeHtml(activity.sessionInfo.platform)} | 
+                    ${escapeHtml(activity.sessionInfo.language)}
+                </div>
+            </div>
+        `;
+    });
+    
+    activityLogContent.innerHTML = html;
 }

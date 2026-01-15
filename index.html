@@ -502,8 +502,15 @@
         <div class="container mx-auto px-4 py-8">
             <header class="mb-8 relative">
                 <div class="absolute inset-0 rounded-lg -z-10" style="background-image: url('images/abeeyside greenway.jpg'); background-size: cover; background-position: center;"></div>
-                <div class="relative p-6 rounded-lg">
+                <div class="relative p-6 rounded-lg flex justify-between items-center">
                     <h1 class="text-4xl font-semibold text-white mb-2" style="text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 0, 0, 0.5);">R&R @ Abbeyside</h1>
+                    <button 
+                        id="viewActivityLogButton"
+                        class="bg-white/20 backdrop-blur-sm text-white px-4 py-2 rounded-lg font-medium hover:bg-white/30 transition-colors shadow-md hidden"
+                        style="text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);"
+                    >
+                        View Activity Log
+                    </button>
                 </div>
             </header>
             
@@ -641,6 +648,35 @@
                     />
                 </div>
                 
+                <div class="mb-4">
+                    <label for="bookingNotes" class="block text-sm font-medium text-[#4a5568] mb-2">
+                        Booking Notes (Optional)
+                    </label>
+                    <textarea 
+                        id="bookingNotes" 
+                        name="bookingNotes"
+                        rows="3"
+                        class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] resize-none"
+                        placeholder="Add any notes about this booking..."
+                    ></textarea>
+                </div>
+                
+                <div class="mb-6">
+                    <label for="bookingPin" class="block text-sm font-medium text-[#4a5568] mb-2">
+                        Booking PIN Code <span class="text-red-500">*</span>
+                    </label>
+                    <input 
+                        type="text" 
+                        id="bookingPin" 
+                        name="bookingPin"
+                        required
+                        maxlength="20"
+                        class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]"
+                        placeholder="Enter a PIN code for this booking"
+                    />
+                    <p class="text-xs text-[#4a5568] mt-1">You'll need this PIN to edit or delete this booking later.</p>
+                </div>
+                
                 <button 
                     type="submit"
                     id="submitButton"
@@ -654,7 +690,7 @@
     </div>
     
     <!-- Success/Error Messages Modal -->
-    <div id="messageModal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+    <div id="messageModal" class="hidden fixed inset-0 z-[60] flex items-center justify-center modal-overlay">
         <div class="modal-content rounded-lg shadow-xl p-8 max-w-md w-full mx-4">
             <div class="text-center">
                 <div id="messageIcon" class="mb-4 text-5xl"></div>
@@ -665,6 +701,178 @@
                 >
                     OK
                 </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- PIN Verification Modal -->
+    <div id="pinVerificationModal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+        <div class="modal-content rounded-lg shadow-xl p-8 max-w-md w-full mx-4">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-semibold text-[#2d3748]">Verify PIN Code</h2>
+                <button 
+                    id="closePinModal"
+                    class="text-[#4a5568] hover:text-[#2d3748] text-2xl font-light"
+                >
+                    ×
+                </button>
+            </div>
+            <div class="mb-4">
+                <p class="text-[#4a5568] mb-4">Please enter the PIN code for this booking:</p>
+                <input 
+                    type="text" 
+                    id="pinInput" 
+                    placeholder="Enter PIN code"
+                    class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]"
+                    autocomplete="off"
+                />
+                <p id="pinError" class="text-red-600 text-sm mt-2 hidden">Incorrect PIN code. Please try again.</p>
+            </div>
+            <div class="flex gap-3">
+                <button 
+                    id="cancelPinButton"
+                    class="flex-1 px-4 py-3 border border-gray-300 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                >
+                    Cancel
+                </button>
+                <button 
+                    id="verifyPinButton"
+                    class="flex-1 bg-[#0ea5e9] text-white py-3 rounded-lg font-medium hover:bg-[#0284c7] transition-colors shadow-md hover:shadow-lg"
+                >
+                    Verify
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Edit Booking Modal -->
+    <div id="editBookingModal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+        <div class="modal-content rounded-lg shadow-xl p-8 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-semibold text-[#2d3748]">Edit Booking</h2>
+                <button 
+                    id="closeEditModal"
+                    class="text-[#4a5568] hover:text-[#2d3748] text-2xl font-light"
+                >
+                    ×
+                </button>
+            </div>
+            
+            <form id="editBookingForm">
+                <div class="mb-4">
+                    <label for="editGuestName" class="block text-sm font-medium text-[#4a5568] mb-2">
+                        Guest Name
+                    </label>
+                    <div class="flex flex-row gap-2">
+                        <select 
+                            id="editGuestNameSelect" 
+                            class="flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] bg-white min-w-0"
+                        >
+                            <option value="">Select a guest name</option>
+                        </select>
+                        <input 
+                            type="text" 
+                            id="editGuestName" 
+                            name="editGuestName"
+                            required
+                            class="flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] min-w-0"
+                            placeholder="Or enter guest name manually"
+                        />
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <label for="editRoomSelect" class="block text-sm font-medium text-[#4a5568] mb-2">
+                        Room
+                    </label>
+                    <select 
+                        id="editRoomSelect" 
+                        name="editRoom"
+                        required
+                        class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] bg-white"
+                    >
+                        <option value="">Select a room</option>
+                        <option value="Entire House">Entire House</option>
+                        <option value="Master">Master</option>
+                        <option value="Twin">Twin</option>
+                        <option value="Bunk">Bunk</option>
+                    </select>
+                </div>
+                
+                <div class="mb-4">
+                    <label for="editStartDate" class="block text-sm font-medium text-[#4a5568] mb-2">
+                        Check-in Date
+                    </label>
+                    <input 
+                        type="date" 
+                        id="editStartDate" 
+                        name="editStartDate"
+                        required
+                        class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]"
+                    />
+                </div>
+                
+                <div class="mb-4">
+                    <label for="editEndDate" class="block text-sm font-medium text-[#4a5568] mb-2">
+                        Check-out Date
+                    </label>
+                    <input 
+                        type="date" 
+                        id="editEndDate" 
+                        name="editEndDate"
+                        required
+                        class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]"
+                    />
+                </div>
+                
+                <div class="mb-4">
+                    <label for="editBookingNotes" class="block text-sm font-medium text-[#4a5568] mb-2">
+                        Booking Notes (Optional)
+                    </label>
+                    <textarea 
+                        id="editBookingNotes" 
+                        name="editBookingNotes"
+                        rows="3"
+                        class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] resize-none"
+                        placeholder="Add any notes about this booking..."
+                    ></textarea>
+                </div>
+                
+                <div class="mb-6 flex gap-3">
+                    <button 
+                        type="button"
+                        id="deleteBookingButton"
+                        class="flex-1 bg-red-600 text-white py-3 rounded-lg font-medium hover:bg-red-700 transition-colors shadow-md hover:shadow-lg"
+                    >
+                        Delete Booking
+                    </button>
+                    <button 
+                        type="submit"
+                        id="updateBookingButton"
+                        class="flex-1 bg-[#0ea5e9] text-white py-3 rounded-lg font-medium hover:bg-[#0284c7] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
+                    >
+                        <span id="updateButtonText">Update Booking</span>
+                        <span id="updateButtonLoading" class="hidden">Updating...</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Activity Log Modal -->
+    <div id="activityLogModal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+        <div class="modal-content rounded-lg shadow-xl p-8 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-semibold text-[#2d3748]">Activity Log</h2>
+                <button 
+                    id="closeActivityLogModal"
+                    class="text-[#4a5568] hover:text-[#2d3748] text-2xl font-light"
+                >
+                    ×
+                </button>
+            </div>
+            <div id="activityLogContent" class="space-y-4">
+                <p class="text-[#4a5568] text-center py-8">Loading activity log...</p>
             </div>
         </div>
     </div>
