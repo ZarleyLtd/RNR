@@ -472,10 +472,6 @@ function initializeBookingModal() {
             pin: normalizePin(document.getElementById('bookingPin').value) // Normalize PIN when creating
         };
         
-        // #region agent log
-        fetch('http://127.0.0.1:7244/ingest/6c453964-aada-481a-b699-6260cc2ff3aa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:243',message:'Form submit started',data:{formData:formData,apiUrl:API_URL},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D,E'})}).catch(()=>{});
-        // #endregion
-        
         // Validate dates
         if (new Date(formData.startDate) >= new Date(formData.endDate)) {
             showMessage('Check-out date must be after check-in date', 'error');
@@ -489,10 +485,6 @@ function initializeBookingModal() {
         
         // Submit booking
         try {
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/6c453964-aada-481a-b699-6260cc2ff3aa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:260',message:'Before fetch request',data:{url:API_URL,method:'POST',body:JSON.stringify(formData)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D,E'})}).catch(()=>{});
-            // #endregion
-            
             // Use URL-encoded form data to avoid CORS preflight issues
             // Google Apps Script Web Apps handle form data better than JSON POST
             const formBody = new URLSearchParams();
@@ -504,10 +496,6 @@ function initializeBookingModal() {
             formBody.append('notes', formData.notes);
             formBody.append('pin', formData.pin);
             
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/6c453964-aada-481a-b699-6260cc2ff3aa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:271',message:'Using form-urlencoded to avoid CORS',data:{formBody:formBody.toString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run4',hypothesisId:'A'})}).catch(()=>{});
-            // #endregion
-            
             const response = await fetch(API_URL, {
                 method: 'POST',
                 mode: 'cors',
@@ -518,46 +506,19 @@ function initializeBookingModal() {
                 },
                 body: formBody.toString()
             }).catch(async (fetchError) => {
-                // #region agent log
-                fetch('http://127.0.0.1:7244/ingest/6c453964-aada-481a-b699-6260cc2ff3aa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:285',message:'Fetch error',data:{errorName:fetchError.name,errorMessage:fetchError.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run4',hypothesisId:'A'})}).catch(()=>{});
-                // #endregion
                 throw fetchError;
             });
-            
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/6c453964-aada-481a-b699-6260cc2ff3aa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:267',message:'After fetch response',data:{status:response.status,statusText:response.statusText,ok:response.ok,headers:Object.fromEntries(response.headers)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
-            // #endregion
             
             if (response.ok) {
                 let result;
                 try {
-                    // #region agent log
-                    fetch('http://127.0.0.1:7244/ingest/6c453964-aada-481a-b699-6260cc2ff3aa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:273',message:'Before response.json()',data:{status:response.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-                    // #endregion
-                    
                     const responseText = await response.text();
-                    
-                    // #region agent log
-                    fetch('http://127.0.0.1:7244/ingest/6c453964-aada-481a-b699-6260cc2ff3aa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:278',message:'Response text received',data:{responseText:responseText,length:responseText.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-                    // #endregion
-                    
                     result = JSON.parse(responseText);
-                    
-                    // #region agent log
-                    fetch('http://127.0.0.1:7244/ingest/6c453964-aada-481a-b699-6260cc2ff3aa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:283',message:'After JSON parse',data:{result:result},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-                    // #endregion
                 } catch (parseError) {
-                    // #region agent log
-                    fetch('http://127.0.0.1:7244/ingest/6c453964-aada-481a-b699-6260cc2ff3aa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:287',message:'JSON parse error',data:{error:parseError.message,stack:parseError.stack},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-                    // #endregion
                     throw parseError;
                 }
                 
                 if (result.success) {
-                    // #region agent log
-                    fetch('http://127.0.0.1:7244/ingest/6c453964-aada-481a-b699-6260cc2ff3aa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:294',message:'Booking success',data:{result:result},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'})}).catch(()=>{});
-                    // #endregion
-                    
                     // Log activity
                     logActivity('create', {
                         guestName: formData.guestName,
@@ -583,24 +544,12 @@ function initializeBookingModal() {
                     // Reload bookings to show the new one
                     loadBookings();
                 } else {
-                    // #region agent log
-                    fetch('http://127.0.0.1:7244/ingest/6c453964-aada-481a-b699-6260cc2ff3aa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:305',message:'API returned success=false',data:{result:result,message:result.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-                    // #endregion
-                    
                     showMessage(result.message || 'Failed to create booking', 'error');
                 }
             } else {
-                // #region agent log
-                fetch('http://127.0.0.1:7244/ingest/6c453964-aada-481a-b699-6260cc2ff3aa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:311',message:'Response not OK',data:{status:response.status,statusText:response.statusText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-                // #endregion
-                
                 showMessage('Error connecting to server', 'error');
             }
         } catch (error) {
-            // #region agent log
-            fetch('http://127.0.0.1:7244/ingest/6c453964-aada-481a-b699-6260cc2ff3aa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app.js:350',message:'Catch block error',data:{errorMessage:error.message,errorStack:error.stack,errorName:error.name},timestamp:Date.now(),sessionId:'debug-session',runId:'run2',hypothesisId:'A,C,D'})}).catch(()=>{});
-            // #endregion
-            
             console.error('Error submitting booking:', error);
             
             // Provide more specific error message based on error type
