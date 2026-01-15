@@ -307,7 +307,7 @@
         .calendar-legend {
             display: flex;
             justify-content: center;
-            gap: 1.5rem;
+            gap: 0.75rem;
             padding: 1rem;
             background-color: white;
             border-top: 1px solid #e2e8f0;
@@ -472,6 +472,20 @@
             }
         }
         
+        /* Room toggle button styles */
+        .room-toggle.active,
+        .edit-room-toggle.active {
+            background-color: var(--ocean-blue) !important;
+            border-color: var(--ocean-blue-dark) !important;
+            color: white !important;
+        }
+        
+        .room-toggle:hover:not(.active),
+        .edit-room-toggle:hover:not(.active) {
+            background-color: var(--sky-blue-light) !important;
+            border-color: var(--ocean-blue) !important;
+        }
+        
     </style>
 </head>
     <body class="min-h-screen bg-[#e0f2fe]">
@@ -563,6 +577,22 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- Info Pages Navigation -->
+            <div class="bg-white rounded-lg shadow-sm border border-gray-200 mt-6">
+                <div class="p-6">
+                    <div class="flex flex-row gap-3 justify-center">
+                        <a href="house-info.html" class="inline-flex items-center gap-2 px-4 py-3 bg-[#0ea5e9] text-white rounded-lg font-medium hover:bg-[#0284c7] transition-colors shadow-md hover:shadow-lg">
+                            <span class="text-xl">🏠</span>
+                            <span>House Info</span>
+                        </a>
+                        <a href="local-info.html" class="inline-flex items-center gap-2 px-4 py-3 bg-[#0ea5e9] text-white rounded-lg font-medium hover:bg-[#0284c7] transition-colors shadow-md hover:shadow-lg">
+                            <span class="text-xl">📍</span>
+                            <span>Local Info</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
     
@@ -584,40 +614,58 @@
                     <label for="guestName" class="block text-sm font-medium text-[#4a5568] mb-2">
                         Guest Name
                     </label>
-                    <div class="flex flex-row gap-2">
-                        <select 
-                            id="guestNameSelect" 
-                            class="flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] bg-white min-w-0"
-                        >
-                            <option value="">Select a guest name</option>
-                        </select>
-                        <input 
-                            type="text" 
-                            id="guestName" 
-                            name="guestName"
-                            required
-                            class="flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] min-w-0"
-                            placeholder="Or enter guest name manually"
-                        />
-                    </div>
+                    <input 
+                        type="text" 
+                        id="guestName" 
+                        name="guestName"
+                        list="guestNameList"
+                        required
+                        autocomplete="off"
+                        class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]"
+                        placeholder="Type or select a guest name"
+                    />
+                    <datalist id="guestNameList">
+                    </datalist>
                 </div>
                 
                 <div class="mb-4">
-                    <label for="roomSelect" class="block text-sm font-medium text-[#4a5568] mb-2">
-                        Room
+                    <label class="block text-sm font-medium text-[#4a5568] mb-2">
+                        Room(s)
                     </label>
-                    <select 
-                        id="roomSelect" 
-                        name="room"
-                        required
-                        class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] bg-white"
-                    >
-                        <option value="">Select a room</option>
-                        <option value="Entire House">Entire House</option>
-                        <option value="Master">Master</option>
-                        <option value="Twin">Twin</option>
-                        <option value="Bunk">Bunk</option>
-                    </select>
+                    <div class="flex gap-3">
+                        <button 
+                            type="button"
+                            id="roomToggleMaster"
+                            data-room="Master"
+                            class="flex-1 px-4 py-3 border-2 rounded-lg font-medium transition-colors room-toggle flex items-center justify-center gap-2"
+                            style="border-color: #e2e8f0; background-color: white; color: #475569;"
+                        >
+                            <span class="text-xl">👑</span>
+                            <span>Master</span>
+                        </button>
+                        <button 
+                            type="button"
+                            id="roomToggleTwin"
+                            data-room="Twin"
+                            class="flex-1 px-4 py-3 border-2 rounded-lg font-medium transition-colors room-toggle flex items-center justify-center gap-2"
+                            style="border-color: #e2e8f0; background-color: white; color: #475569;"
+                        >
+                            <span class="text-xl">🛏️</span>
+                            <span>Twin</span>
+                        </button>
+                        <button 
+                            type="button"
+                            id="roomToggleBunk"
+                            data-room="Bunk"
+                            class="flex-1 px-4 py-3 border-2 rounded-lg font-medium transition-colors room-toggle flex items-center justify-center gap-2"
+                            style="border-color: #e2e8f0; background-color: white; color: #475569;"
+                        >
+                            <span class="text-xl">🚂</span>
+                            <span>Bunk</span>
+                        </button>
+                    </div>
+                    <input type="hidden" id="roomSelect" name="room" required />
+                    <p class="text-xs text-[#4a5568] mt-2">Select one or more rooms. All 3 rooms = Entire House.</p>
                 </div>
                 
                 <div class="mb-6">
@@ -663,18 +711,17 @@
                 
                 <div class="mb-6">
                     <label for="bookingPin" class="block text-sm font-medium text-[#4a5568] mb-2">
-                        Booking PIN Code <span class="text-red-500">*</span>
+                        Booking PIN Code (Optional)
                     </label>
                     <input 
                         type="text" 
                         id="bookingPin" 
                         name="bookingPin"
-                        required
                         maxlength="20"
                         class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]"
-                        placeholder="Enter a PIN code for this booking"
+                        placeholder="Enter a PIN code for this booking (optional)"
                     />
-                    <p class="text-xs text-[#4a5568] mt-1">You'll need this PIN to edit or delete this booking later.</p>
+                    <p class="text-xs text-[#4a5568] mt-1">If no PIN is provided, you won't need one to edit or delete this booking later.</p>
                 </div>
                 
                 <button 
@@ -701,6 +748,33 @@
                 >
                     OK
                 </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Delete Confirmation Modal -->
+    <div id="deleteConfirmModal" class="hidden fixed inset-0 z-[60] flex items-center justify-center modal-overlay">
+        <div class="modal-content rounded-lg shadow-xl p-8 max-w-md w-full mx-4">
+            <div class="text-center">
+                <div id="deleteConfirmIcon" class="mb-4 text-5xl text-red-600">⚠</div>
+                <p id="deleteConfirmText" class="text-xl font-medium mb-6 text-[#2d3748]">Are you sure you want to delete this booking?</p>
+                <p class="text-sm text-[#64748b] mb-6">This action cannot be undone.</p>
+                <div class="flex gap-3">
+                    <button 
+                        type="button"
+                        id="cancelDeleteButton"
+                        class="flex-1 px-4 py-3 border border-gray-300 rounded-lg font-medium hover:bg-gray-50 transition-colors text-[#475569]"
+                    >
+                        Cancel
+                    </button>
+                    <button 
+                        type="button"
+                        id="confirmDeleteButton"
+                        class="flex-1 bg-red-600 text-white py-3 rounded-lg font-medium hover:bg-red-700 transition-colors shadow-md hover:shadow-lg"
+                    >
+                        Delete
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -763,40 +837,58 @@
                     <label for="editGuestName" class="block text-sm font-medium text-[#4a5568] mb-2">
                         Guest Name
                     </label>
-                    <div class="flex flex-row gap-2">
-                        <select 
-                            id="editGuestNameSelect" 
-                            class="flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] bg-white min-w-0"
-                        >
-                            <option value="">Select a guest name</option>
-                        </select>
-                        <input 
-                            type="text" 
-                            id="editGuestName" 
-                            name="editGuestName"
-                            required
-                            class="flex-1 px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] min-w-0"
-                            placeholder="Or enter guest name manually"
-                        />
-                    </div>
+                    <input 
+                        type="text" 
+                        id="editGuestName" 
+                        name="editGuestName"
+                        list="editGuestNameList"
+                        required
+                        autocomplete="off"
+                        class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0ea5e9]"
+                        placeholder="Type or select a guest name"
+                    />
+                    <datalist id="editGuestNameList">
+                    </datalist>
                 </div>
                 
                 <div class="mb-4">
-                    <label for="editRoomSelect" class="block text-sm font-medium text-[#4a5568] mb-2">
-                        Room
+                    <label class="block text-sm font-medium text-[#4a5568] mb-2">
+                        Room(s)
                     </label>
-                    <select 
-                        id="editRoomSelect" 
-                        name="editRoom"
-                        required
-                        class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] bg-white"
-                    >
-                        <option value="">Select a room</option>
-                        <option value="Entire House">Entire House</option>
-                        <option value="Master">Master</option>
-                        <option value="Twin">Twin</option>
-                        <option value="Bunk">Bunk</option>
-                    </select>
+                    <div class="flex gap-3">
+                        <button 
+                            type="button"
+                            id="editRoomToggleMaster"
+                            data-room="Master"
+                            class="flex-1 px-4 py-3 border-2 rounded-lg font-medium transition-colors edit-room-toggle flex items-center justify-center gap-2"
+                            style="border-color: #e2e8f0; background-color: white; color: #475569;"
+                        >
+                            <span class="text-xl">👑</span>
+                            <span>Master</span>
+                        </button>
+                        <button 
+                            type="button"
+                            id="editRoomToggleTwin"
+                            data-room="Twin"
+                            class="flex-1 px-4 py-3 border-2 rounded-lg font-medium transition-colors edit-room-toggle flex items-center justify-center gap-2"
+                            style="border-color: #e2e8f0; background-color: white; color: #475569;"
+                        >
+                            <span class="text-xl">🛏️</span>
+                            <span>Twin</span>
+                        </button>
+                        <button 
+                            type="button"
+                            id="editRoomToggleBunk"
+                            data-room="Bunk"
+                            class="flex-1 px-4 py-3 border-2 rounded-lg font-medium transition-colors edit-room-toggle flex items-center justify-center gap-2"
+                            style="border-color: #e2e8f0; background-color: white; color: #475569;"
+                        >
+                            <span class="text-xl">🚂</span>
+                            <span>Bunk</span>
+                        </button>
+                    </div>
+                    <input type="hidden" id="editRoomSelect" name="editRoom" required />
+                    <p class="text-xs text-[#4a5568] mt-2">Select one or more rooms. All 3 rooms = Entire House.</p>
                 </div>
                 
                 <div class="mb-4">

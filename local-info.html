@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local Info - R&R @ Abbeyside</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Custom Styles -->
+    <style>
+        :root {
+            --ocean-blue: #0ea5e9;
+            --ocean-blue-dark: #0284c7;
+            --turquoise: #14b8a6;
+            --turquoise-light: #5eead4;
+            --sand-beige: #fef3c7;
+            --sand-tan: #fde68a;
+            --coral: #fb7185;
+            --coral-light: #fda4af;
+            --sky-blue: #e0f2fe;
+            --sky-blue-light: #bae6fd;
+            --slate-gray: #475569;
+            --slate-dark: #1e293b;
+        }
+        
+        body {
+            background-color: var(--sky-blue);
+            background-image: 
+                linear-gradient(rgba(224, 242, 254, 0.6), rgba(186, 230, 253, 0.6)),
+                url('images/abeeyside lismore.jpg');
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed;
+            background-repeat: no-repeat;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            color: var(--slate-dark);
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-[#e0f2fe]">
+    <div class="container mx-auto px-4 py-8">
+        <header class="mb-8 relative">
+            <div class="absolute inset-0 rounded-lg -z-10" style="background-image: url('images/abeeyside greenway.jpg'); background-size: cover; background-position: center;"></div>
+            <div class="relative p-6 rounded-lg flex justify-between items-center">
+                <h1 class="text-4xl font-semibold text-white mb-2" style="text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 0, 0, 0.5);">R&R @ Abbeyside</h1>
+            </div>
+        </header>
+        
+        <!-- Back Button -->
+        <div class="mb-6">
+            <a href="index.html" class="inline-flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-sm border border-gray-200 hover:bg-gray-50 transition-colors text-[#475569] font-medium">
+                <span>←</span>
+                <span>Back to Calendar</span>
+            </a>
+        </div>
+        
+        <!-- Featured Image -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 mb-6 overflow-hidden">
+            <img src="images/abeeyside park.jpg" alt="Local Park" class="w-full h-auto object-cover" style="max-height: 500px;">
+        </div>
+        
+        <!-- Content Area -->
+        <div class="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <h2 class="text-3xl font-semibold text-[#2d3748] mb-4">Local Info</h2>
+            <div class="prose max-w-none text-[#4a5568]">
+                <p class="text-lg">Content will be added here.</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

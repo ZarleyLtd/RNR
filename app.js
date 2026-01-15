@@ -47,10 +47,12 @@ document.addEventListener('DOMContentLoaded', function() {
         initializeCalendar();
         initializeMessageToast();
         initializeGuestNameSelect();
+        initializeRoomToggles();
         initializeProceedButton();
         initializePinVerificationModal();
         initializeEditBookingModal();
         initializeActivityLogModal();
+        initializeDeleteConfirmModal();
         loadBookings();
         loadActivityLog();
         updateActivityLogButtonVisibility();
@@ -267,8 +269,12 @@ function renderCalendar() {
 
 // Get availability status for a specific date
 function getDateAvailability(dateStr) {
-    const date = new Date(dateStr);
-    date.setHours(0, 0, 0, 0);
+    // Parse date string without timezone conversion
+    const date = parseDateString(dateStr);
+    if (!date) {
+        // Fallback for invalid dates
+        return { status: 'available', availableRooms: ROOMS.map(r => r.id), bookedRooms: [], entireHouseBooked: false };
+    }
     
     const availableRooms = [];
     const bookedRooms = [];
@@ -277,10 +283,9 @@ function getDateAvailability(dateStr) {
     // Check for entire house bookings first
     entireHouseBooked = bookings.some(booking => {
         if (booking.room !== 'Entire House') return false;
-        const bookingStart = new Date(booking.startDate);
-        const bookingEnd = new Date(booking.endDate);
-        bookingStart.setHours(0, 0, 0, 0);
-        bookingEnd.setHours(0, 0, 0, 0);
+        const bookingStart = parseDateString(booking.startDate);
+        const bookingEnd = parseDateString(booking.endDate);
+        if (!bookingStart || !bookingEnd) return false;
         return date >= bookingStart && date < bookingEnd;
     });
     
@@ -296,11 +301,15 @@ function getDateAvailability(dateStr) {
     ROOMS.forEach(room => {
         // Check if this room is booked on this date
         const isBooked = bookings.some(booking => {
-            if (booking.room !== room.id) return false;
-            const bookingStart = new Date(booking.startDate);
-            const bookingEnd = new Date(booking.endDate);
-            bookingStart.setHours(0, 0, 0, 0);
-            bookingEnd.setHours(0, 0, 0, 0);
+            const bookingRoom = booking.room || '';
+            // Check if booking room matches this room, or if it's a comma-separated list containing this room
+            const roomMatches = bookingRoom === room.id || 
+                               bookingRoom === 'Entire House' ||
+                               (bookingRoom.includes(',') && bookingRoom.split(',').map(r => r.trim()).includes(room.id));
+            if (!roomMatches) return false;
+            const bookingStart = parseDateString(booking.startDate);
+            const bookingEnd = parseDateString(booking.endDate);
+            if (!bookingStart || !bookingEnd) return false;
             // Date is booked if it's >= start and < end
             return date >= bookingStart && date < bookingEnd;
         });
@@ -330,6 +339,26 @@ function getDateAvailability(dateStr) {
     };
 }
 
+
+// Helper function to parse date string (YYYY-MM-DD) without timezone conversion
+function parseDateString(dateStr) {
+    if (!dateStr) return null;
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return null;
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1; // Month is 0-indexed
+    const day = parseInt(parts[2], 10);
+    return new Date(year, month, day);
+}
+
+// Helper function to format date as YYYY-MM-DD using local date components (not UTC)
+function formatDateString(date) {
+    if (!date) return null;
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
 
 // Helper function to check if two dates are the same day
 function isSameDay(date1, date2) {
@@ -376,36 +405,93 @@ async function loadBookings() {
     }
 }
 
-// Initialize guest name select dropdown
+// Initialize guest name autocomplete
 function initializeGuestNameSelect() {
-    const guestNameSelect = document.getElementById('guestNameSelect');
     const guestNameInput = document.getElementById('guestName');
+    const guestNameList = document.getElementById('guestNameList');
+    const editGuestNameInput = document.getElementById('editGuestName');
+    const editGuestNameList = document.getElementById('editGuestNameList');
     
-    if (!guestNameSelect || !guestNameInput) return;
+    // Populate datalist for new booking
+    if (guestNameList) {
+        GUEST_NAMES.forEach(name => {
+            const option = document.createElement('option');
+            option.value = name;
+            guestNameList.appendChild(option);
+        });
+    }
     
-    // Populate dropdown with guest names
-    GUEST_NAMES.forEach(name => {
-        const option = document.createElement('option');
-        option.value = name;
-        option.textContent = name;
-        guestNameSelect.appendChild(option);
+    // Populate datalist for edit booking
+    if (editGuestNameList) {
+        GUEST_NAMES.forEach(name => {
+            const option = document.createElement('option');
+            option.value = name;
+            editGuestNameList.appendChild(option);
+        });
+    }
+}
+
+// Initialize room toggles
+function initializeRoomToggles() {
+    // New booking room toggles
+    const roomToggles = document.querySelectorAll('.room-toggle');
+    roomToggles.forEach(toggle => {
+        toggle.addEventListener('click', function() {
+            this.classList.toggle('active');
+            updateRoomSelection();
+        });
     });
     
-    // When a name is selected, populate the input
-    guestNameSelect.addEventListener('change', function() {
-        if (this.value) {
-            guestNameInput.value = this.value;
-        }
+    // Edit booking room toggles
+    const editRoomToggles = document.querySelectorAll('.edit-room-toggle');
+    editRoomToggles.forEach(toggle => {
+        toggle.addEventListener('click', function() {
+            this.classList.toggle('active');
+            updateEditRoomSelection();
+        });
+    });
+}
+
+// Update room selection for new booking
+function updateRoomSelection() {
+    const selectedRooms = [];
+    document.querySelectorAll('.room-toggle.active').forEach(toggle => {
+        selectedRooms.push(toggle.getAttribute('data-room'));
     });
     
-    // When input is manually changed, sync with select
-    guestNameInput.addEventListener('input', function() {
-        if (GUEST_NAMES.includes(this.value)) {
-            guestNameSelect.value = this.value;
-        } else if (this.value) {
-            guestNameSelect.value = '';
-        }
+    const roomSelect = document.getElementById('roomSelect');
+    if (!roomSelect) return;
+    
+    // If all 3 rooms selected, set as "Entire House"
+    if (selectedRooms.length === 3) {
+        roomSelect.value = 'Entire House';
+    } else if (selectedRooms.length > 0) {
+        // For now, we'll store as comma-separated, but backend will need to handle this
+        // Actually, let's store as "Entire House" if all 3, otherwise as comma-separated
+        roomSelect.value = selectedRooms.join(',');
+    } else {
+        roomSelect.value = '';
+    }
+}
+
+// Update room selection for edit booking
+function updateEditRoomSelection() {
+    const selectedRooms = [];
+    document.querySelectorAll('.edit-room-toggle.active').forEach(toggle => {
+        selectedRooms.push(toggle.getAttribute('data-room'));
     });
+    
+    const roomSelect = document.getElementById('editRoomSelect');
+    if (!roomSelect) return;
+    
+    // If all 3 rooms selected, set as "Entire House"
+    if (selectedRooms.length === 3) {
+        roomSelect.value = 'Entire House';
+    } else if (selectedRooms.length > 0) {
+        roomSelect.value = selectedRooms.join(',');
+    } else {
+        roomSelect.value = '';
+    }
 }
 
 // Initialize proceed button
@@ -427,6 +513,10 @@ function initializeBookingModal() {
     closeModal.addEventListener('click', function() {
         bookingModal.classList.add('hidden');
         bookingForm.reset();
+        // Reset room toggles
+        document.querySelectorAll('.room-toggle').forEach(toggle => {
+            toggle.classList.remove('active');
+        });
         document.body.style.overflow = '';
         // Reset date selection
         selectedCheckin = null;
@@ -443,6 +533,10 @@ function initializeBookingModal() {
         if (e.target === bookingModal) {
             bookingModal.classList.add('hidden');
             bookingForm.reset();
+            // Reset room toggles
+            document.querySelectorAll('.room-toggle').forEach(toggle => {
+                toggle.classList.remove('active');
+            });
             document.body.style.overflow = '';
             // Reset date selection
             selectedCheckin = null;
@@ -463,13 +557,33 @@ function initializeBookingModal() {
         const submitButtonText = document.getElementById('submitButtonText');
         const submitButtonLoading = document.getElementById('submitButtonLoading');
         
+        // Get selected rooms
+        const selectedRooms = [];
+        document.querySelectorAll('.room-toggle.active').forEach(toggle => {
+            selectedRooms.push(toggle.getAttribute('data-room'));
+        });
+        
+        // Validate at least one room is selected
+        if (selectedRooms.length === 0) {
+            showMessage('Please select at least one room', 'error');
+            return;
+        }
+        
+        // Determine room value: "Entire House" if all 3, otherwise comma-separated
+        let roomValue;
+        if (selectedRooms.length === 3) {
+            roomValue = 'Entire House';
+        } else {
+            roomValue = selectedRooms.join(',');
+        }
+        
         const formData = {
             guestName: document.getElementById('guestName').value.trim(),
-            room: document.getElementById('roomSelect').value,
+            room: roomValue,
             startDate: document.getElementById('startDate').value,
             endDate: document.getElementById('endDate').value,
             notes: document.getElementById('bookingNotes').value.trim(),
-            pin: normalizePin(document.getElementById('bookingPin').value) // Normalize PIN when creating
+            pin: normalizePin(document.getElementById('bookingPin').value) // Normalize PIN when creating (can be empty)
         };
         
         // Validate dates
@@ -581,7 +695,7 @@ function isDateRangeAvailable(checkin, checkout) {
     // Checkout date can be fully booked since guests leave that day
     const current = new Date(start);
     while (current < end) {
-        const dateStr = current.toISOString().split('T')[0];
+        const dateStr = formatDateString(current);
         const availability = getDateAvailability(dateStr);
         
         // If any date (except checkout) is fully booked, the range is not available
@@ -612,7 +726,7 @@ function getAvailableRoomsForDateRange(checkin, checkout) {
     // Check each date in the range (excluding checkout date)
     const current = new Date(start);
     while (current < end) {
-        const dateStr = current.toISOString().split('T')[0];
+        const dateStr = formatDateString(current);
         const availability = getDateAvailability(dateStr);
         
         // If entire house is booked on this date, remove it
@@ -651,30 +765,33 @@ function getAvailableRoomsForDateRange(checkin, checkout) {
 
 // Handle date selection from calendar
 function handleDateSelection(dateStr) {
-    const date = new Date(dateStr);
-    date.setHours(0, 0, 0, 0);
+    // Parse date string without timezone conversion and normalize to midnight
+    const date = parseDateString(dateStr);
+    if (!date) return;
+    // Ensure date is normalized to local midnight for consistent comparisons
+    const normalizedDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     
     // Check if this date is fully booked
     const availability = getDateAvailability(dateStr);
     const isFullyBooked = availability.status === 'booked';
     
     // If no checkin selected, or if clicking a date before/equal to current checkin, set as checkin
-    if (!selectedCheckin || date <= selectedCheckin) {
+    if (!selectedCheckin || normalizedDate <= selectedCheckin) {
         // Don't allow selecting a fully booked date as check-in
         if (isFullyBooked) {
             showMessage('Cannot select a fully booked date as check-in date.', 'error');
             return;
         }
-        selectedCheckin = date;
+        selectedCheckin = normalizedDate;
         selectedCheckout = null;
     } else if (!selectedCheckout) {
         // If checkin is selected, set as checkout (must be after checkin)
         // Checkout date can be fully booked since that's the departure day
-        if (date > selectedCheckin) {
+        if (normalizedDate > selectedCheckin) {
             // Check if the date range is available (no fully booked dates in between)
             // Note: checkout date itself can be fully booked
-            if (isDateRangeAvailable(selectedCheckin, date)) {
-                selectedCheckout = date;
+            if (isDateRangeAvailable(selectedCheckin, normalizedDate)) {
+                selectedCheckout = normalizedDate;
             } else {
                 // Show error message and don't set checkout
                 showMessage('Cannot select this date range. Some dates in between are fully booked.', 'error');
@@ -688,7 +805,7 @@ function handleDateSelection(dateStr) {
             showMessage('Cannot select a fully booked date as check-in date.', 'error');
             return;
         }
-        selectedCheckin = date;
+        selectedCheckin = normalizedDate;
         selectedCheckout = null;
     }
     
@@ -708,22 +825,35 @@ function updateCalendarSelection() {
     
     if (!selectedCheckin) return;
     
-    const checkinStr = selectedCheckin.toISOString().split('T')[0];
-    const checkoutStr = selectedCheckout ? selectedCheckout.toISOString().split('T')[0] : null;
+    const checkinStr = formatDateString(selectedCheckin);
+    const checkoutStr = selectedCheckout ? formatDateString(selectedCheckout) : null;
     
     calendarContainer.querySelectorAll('.calendar-day:not(.empty)').forEach(cell => {
         const cellDateStr = cell.getAttribute('data-date');
         if (!cellDateStr) return;
         
-        const cellDate = new Date(cellDateStr);
-        cellDate.setHours(0, 0, 0, 0);
+        // Parse date string without timezone conversion
+        const cellDate = parseDateString(cellDateStr);
+        if (!cellDate) return;
         
-        if (cellDateStr === checkinStr) {
+        // Normalize dates to midnight for accurate comparison
+        const normalizedCellDate = new Date(cellDate.getFullYear(), cellDate.getMonth(), cellDate.getDate());
+        const normalizedCheckin = new Date(selectedCheckin.getFullYear(), selectedCheckin.getMonth(), selectedCheckin.getDate());
+        const normalizedCheckout = selectedCheckout ? new Date(selectedCheckout.getFullYear(), selectedCheckout.getMonth(), selectedCheckout.getDate()) : null;
+        
+        const isCheckin = cellDateStr === checkinStr;
+        const isCheckout = checkoutStr && cellDateStr === checkoutStr;
+        const isInRange = checkoutStr && normalizedCellDate > normalizedCheckin && normalizedCellDate < normalizedCheckout;
+        
+        if (isCheckin) {
             cell.classList.add('selected', 'selected-start');
-        } else if (checkoutStr && cellDateStr === checkoutStr) {
+        } else if (isCheckout) {
             cell.classList.add('selected', 'selected-end');
-        } else if (checkoutStr && cellDate > selectedCheckin && cellDate < selectedCheckout) {
+        } else if (isInRange) {
             cell.classList.add('selected-range');
+        } else {
+            // Remove any selection classes if this cell shouldn't be highlighted
+            cell.classList.remove('selected', 'selected-range', 'selected-start', 'selected-end');
         }
     });
 }
@@ -770,13 +900,11 @@ function openBookingModal() {
     const endDateInput = document.getElementById('endDate');
     const checkinDateDisplay = document.getElementById('checkinDateDisplay');
     const checkoutDateDisplay = document.getElementById('checkoutDateDisplay');
-    const guestNameSelect = document.getElementById('guestNameSelect');
     const guestNameInput = document.getElementById('guestName');
-    const roomSelect = document.getElementById('roomSelect');
     
     // Set hidden date inputs for form submission
-    const checkinStr = selectedCheckin.toISOString().split('T')[0];
-    const checkoutStr = selectedCheckout.toISOString().split('T')[0];
+    const checkinStr = formatDateString(selectedCheckin);
+    const checkoutStr = formatDateString(selectedCheckout);
     startDateInput.value = checkinStr;
     endDateInput.value = checkoutStr;
     
@@ -788,28 +916,23 @@ function openBookingModal() {
         checkoutDateDisplay.textContent = formatDateDisplay(selectedCheckout);
     }
     
-    // Update room select to only show available rooms
-    if (roomSelect) {
-        // Get available rooms for the selected date range
+    // Reset room toggles
+    document.querySelectorAll('.room-toggle').forEach(toggle => {
+        toggle.classList.remove('active');
+        // Check if room is available for the selected date range
+        const roomId = toggle.getAttribute('data-room');
         const availableRooms = getAvailableRoomsForDateRange(selectedCheckin, selectedCheckout);
-        
-        // Clear existing options (except the first "Select a room" option)
-        roomSelect.innerHTML = '<option value="">Select a room</option>';
-        
-        // Add available rooms
-        availableRooms.forEach(roomId => {
-            const option = document.createElement('option');
-            option.value = roomId;
-            option.textContent = roomId === 'Entire House' ? 'Entire House' : roomId;
-            roomSelect.appendChild(option);
-        });
-        
-        // Reset selection
-        roomSelect.value = '';
-    }
+        // Enable/disable based on availability
+        if (availableRooms.includes(roomId) || availableRooms.includes('Entire House')) {
+            toggle.disabled = false;
+            toggle.style.opacity = '1';
+        } else {
+            toggle.disabled = true;
+            toggle.style.opacity = '0.5';
+        }
+    });
     
-    // Reset guest name fields
-    if (guestNameSelect) guestNameSelect.value = '';
+    // Reset guest name field
     if (guestNameInput) guestNameInput.value = '';
     
     bookingModal.classList.remove('hidden');
@@ -821,9 +944,7 @@ function openBookingModal() {
     
     // Small delay for focus on mobile
     setTimeout(() => {
-        if (guestNameSelect) {
-            guestNameSelect.focus();
-        } else if (guestNameInput) {
+        if (guestNameInput) {
             guestNameInput.focus();
         }
     }, 100);
@@ -894,16 +1015,61 @@ function renderBookingsList() {
         return;
     }
     
-    // Format dates for display
-    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December'];
+    // Format dates for display in compact format
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     
-    function formatDate(dateStr) {
-        const date = new Date(dateStr);
-        const month = monthNames[date.getMonth()];
-        const day = date.getDate();
-        const year = date.getFullYear();
-        return `${month} ${day}, ${year}`;
+    function formatBookingDateRange(startDateStr, endDateStr) {
+        const startDate = new Date(startDateStr);
+        const endDate = new Date(endDateStr);
+        
+        const startMonth = startDate.getMonth();
+        const startDay = startDate.getDate();
+        const startYear = startDate.getFullYear();
+        const startDayName = dayNames[startDate.getDay()];
+        
+        const endMonth = endDate.getMonth();
+        const endDay = endDate.getDate();
+        const endYear = endDate.getFullYear();
+        const endDayName = dayNames[endDate.getDay()];
+        
+        // Check if months are different
+        const monthsDifferent = startMonth !== endMonth;
+        // Check if years are different
+        const yearsDifferent = startYear !== endYear;
+        
+        let dateStr = '';
+        
+        // Start date: always show month and day
+        dateStr += monthNames[startMonth] + ' ' + startDay;
+        
+        // Add year to start date only if years are different
+        if (yearsDifferent) {
+            dateStr += ', ' + startYear;
+        }
+        
+        dateStr += ' - ';
+        
+        // End date: show month only if different from start month
+        if (monthsDifferent) {
+            dateStr += monthNames[endMonth] + ' ';
+        }
+        
+        dateStr += endDay;
+        
+        // Add year: if years are the same, show once at the end; if different, show on end date too
+        if (yearsDifferent) {
+            dateStr += ', ' + endYear;
+        } else {
+            // Same year: show once at the end
+            dateStr += ', ' + endYear;
+        }
+        
+        // Add day names in parentheses
+        dateStr += ' (' + startDayName + ' - ' + endDayName + ')';
+        
+        return dateStr;
     }
     
     let html = '';
@@ -912,19 +1078,16 @@ function renderBookingsList() {
         const bookingId = booking.id || booking.rowId || JSON.stringify(booking);
         html += `
             <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors cursor-pointer booking-item" data-booking-id="${escapeHtml(bookingId)}">
-                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                    <div class="flex-1 flex items-start gap-3">
-                        <span class="text-2xl flex-shrink-0">${roomIcon}</span>
-                        <div class="flex-1">
-                            <div class="font-semibold text-[#1e293b] mb-1">${escapeHtml(booking.guestName)}</div>
-                            <div class="text-sm text-[#475569]">
-                                <span class="font-medium">${booking.room} Room</span> • 
-                                ${formatDate(booking.startDate)} - ${formatDate(booking.endDate)}
-                            </div>
-                            ${booking.notes ? `<div class="text-xs text-[#64748b] mt-1 italic">${escapeHtml(booking.notes)}</div>` : ''}
+                <div class="flex items-start gap-3">
+                    <span class="text-2xl flex-shrink-0">${roomIcon}</span>
+                    <div class="flex-1">
+                        <div class="font-semibold text-[#1e293b] mb-1">${escapeHtml(booking.guestName)}</div>
+                        <div class="text-sm text-[#475569]">
+                            <span class="font-medium">${booking.room}</span> • 
+                            ${formatBookingDateRange(booking.startDate, booking.endDate)}
                         </div>
+                        ${booking.notes ? `<div class="text-xs text-[#64748b] mt-1 italic">${escapeHtml(booking.notes)}</div>` : ''}
                     </div>
-                    <div class="text-xs text-[#64748b] md:ml-4">Click to edit/delete</div>
                 </div>
             </div>
         `;
@@ -1075,6 +1238,13 @@ function openPinVerificationModal(booking) {
         return;
     }
     
+    // Skip PIN verification if booking has no PIN
+    const bookingPin = normalizePin(booking.pin || '');
+    if (bookingPin === '') {
+        openEditBookingModal(booking);
+        return;
+    }
+    
     const pinModal = document.getElementById('pinVerificationModal');
     const pinInput = document.getElementById('pinInput');
     const pinError = document.getElementById('pinError');
@@ -1106,12 +1276,20 @@ function verifyPinCode() {
     
     if (!currentEditingBooking || !pinInput) return;
     
+    // If booking has no PIN, skip verification
+    const bookingPin = normalizePin(currentEditingBooking.pin || '');
+    if (bookingPin === '') {
+        pinModal.classList.add('hidden');
+        document.body.style.overflow = '';
+        openEditBookingModal(currentEditingBooking);
+        return;
+    }
+    
     // Normalize both PINs: handle all whitespace characters and sequences
     const enteredPin = normalizePin(pinInput.value);
-    const bookingPin = normalizePin(currentEditingBooking.pin);
     
     // Compare normalized PINs
-    if (enteredPin === bookingPin && enteredPin !== '') {
+    if (enteredPin === bookingPin) {
         pinModal.classList.add('hidden');
         document.body.style.overflow = '';
         openEditBookingModal(currentEditingBooking);
@@ -1134,6 +1312,10 @@ function initializeEditBookingModal() {
     const closeModal = () => {
         editModal.classList.add('hidden');
         editForm.reset();
+        // Reset room toggles
+        document.querySelectorAll('.edit-room-toggle').forEach(toggle => {
+            toggle.classList.remove('active');
+        });
         document.body.style.overflow = '';
         currentEditingBooking = null;
     };
@@ -1151,9 +1333,7 @@ function initializeEditBookingModal() {
     
     if (deleteButton) {
         deleteButton.addEventListener('click', function() {
-            if (confirm('Are you sure you want to delete this booking? This action cannot be undone.')) {
-                deleteBooking();
-            }
+            showDeleteConfirmModal();
         });
     }
     
@@ -1163,32 +1343,6 @@ function initializeEditBookingModal() {
         }
     });
     
-    // Initialize guest name select for edit modal
-    const editGuestNameSelect = document.getElementById('editGuestNameSelect');
-    const editGuestNameInput = document.getElementById('editGuestName');
-    
-    if (editGuestNameSelect && editGuestNameInput) {
-        GUEST_NAMES.forEach(name => {
-            const option = document.createElement('option');
-            option.value = name;
-            option.textContent = name;
-            editGuestNameSelect.appendChild(option);
-        });
-        
-        editGuestNameSelect.addEventListener('change', function() {
-            if (this.value) {
-                editGuestNameInput.value = this.value;
-            }
-        });
-        
-        editGuestNameInput.addEventListener('input', function() {
-            if (GUEST_NAMES.includes(this.value)) {
-                editGuestNameSelect.value = this.value;
-            } else if (this.value) {
-                editGuestNameSelect.value = '';
-            }
-        });
-    }
 }
 
 // Open edit booking modal
@@ -1196,7 +1350,6 @@ function openEditBookingModal(booking) {
     currentEditingBooking = booking;
     const editModal = document.getElementById('editBookingModal');
     const editGuestName = document.getElementById('editGuestName');
-    const editGuestNameSelect = document.getElementById('editGuestNameSelect');
     const editRoomSelect = document.getElementById('editRoomSelect');
     const editStartDate = document.getElementById('editStartDate');
     const editEndDate = document.getElementById('editEndDate');
@@ -1206,10 +1359,39 @@ function openEditBookingModal(booking) {
     
     // Populate form fields
     if (editGuestName) editGuestName.value = booking.guestName || '';
-    if (editGuestNameSelect) {
-        editGuestNameSelect.value = GUEST_NAMES.includes(booking.guestName) ? booking.guestName : '';
+    
+    // Handle room selection - parse room value and set toggles
+    const roomValue = booking.room || '';
+    if (roomValue === 'Entire House') {
+        // All 3 rooms selected
+        document.querySelectorAll('.edit-room-toggle').forEach(toggle => {
+            toggle.classList.add('active');
+        });
+        if (editRoomSelect) editRoomSelect.value = 'Entire House';
+    } else if (roomValue.includes(',')) {
+        // Multiple rooms (comma-separated)
+        const rooms = roomValue.split(',').map(r => r.trim());
+        document.querySelectorAll('.edit-room-toggle').forEach(toggle => {
+            const roomId = toggle.getAttribute('data-room');
+            if (rooms.includes(roomId)) {
+                toggle.classList.add('active');
+            } else {
+                toggle.classList.remove('active');
+            }
+        });
+        if (editRoomSelect) editRoomSelect.value = roomValue;
+    } else {
+        // Single room
+        document.querySelectorAll('.edit-room-toggle').forEach(toggle => {
+            toggle.classList.remove('active');
+            const roomId = toggle.getAttribute('data-room');
+            if (roomId === roomValue) {
+                toggle.classList.add('active');
+            }
+        });
+        if (editRoomSelect) editRoomSelect.value = roomValue;
     }
-    if (editRoomSelect) editRoomSelect.value = booking.room || '';
+    
     if (editStartDate) editStartDate.value = booking.startDate || '';
     if (editEndDate) editEndDate.value = booking.endDate || '';
     if (editBookingNotes) editBookingNotes.value = booking.notes || '';
@@ -1232,10 +1414,30 @@ async function updateBooking() {
     const updateButtonLoading = document.getElementById('updateButtonLoading');
     const editModal = document.getElementById('editBookingModal');
     
+    // Get selected rooms
+    const selectedRooms = [];
+    document.querySelectorAll('.edit-room-toggle.active').forEach(toggle => {
+        selectedRooms.push(toggle.getAttribute('data-room'));
+    });
+    
+    // Validate at least one room is selected
+    if (selectedRooms.length === 0) {
+        showMessage('Please select at least one room', 'error');
+        return;
+    }
+    
+    // Determine room value: "Entire House" if all 3, otherwise comma-separated
+    let roomValue;
+    if (selectedRooms.length === 3) {
+        roomValue = 'Entire House';
+    } else {
+        roomValue = selectedRooms.join(',');
+    }
+    
     const formData = {
         bookingId: currentEditingBooking.id || currentEditingBooking.rowId,
         guestName: document.getElementById('editGuestName').value.trim(),
-        room: document.getElementById('editRoomSelect').value,
+        room: roomValue,
         startDate: document.getElementById('editStartDate').value,
         endDate: document.getElementById('editEndDate').value,
         notes: document.getElementById('editBookingNotes').value.trim()
@@ -1503,6 +1705,67 @@ function initializeActivityLogModal() {
             closeModal();
         }
     });
+}
+
+// Initialize delete confirmation modal
+function initializeDeleteConfirmModal() {
+    const deleteConfirmModal = document.getElementById('deleteConfirmModal');
+    const cancelDeleteButton = document.getElementById('cancelDeleteButton');
+    const confirmDeleteButton = document.getElementById('confirmDeleteButton');
+    
+    if (!deleteConfirmModal) {
+        console.warn('Delete confirmation modal not found');
+        return;
+    }
+    
+    const closeModal = () => {
+        deleteConfirmModal.classList.add('hidden');
+        document.body.style.overflow = '';
+    };
+    
+    if (cancelDeleteButton) {
+        cancelDeleteButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            closeModal();
+        });
+    } else {
+        console.warn('Cancel delete button not found');
+    }
+    
+    if (confirmDeleteButton) {
+        confirmDeleteButton.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            closeModal();
+            deleteBooking();
+        });
+    } else {
+        console.warn('Confirm delete button not found');
+    }
+    
+    deleteConfirmModal.addEventListener('click', function(e) {
+        if (e.target === deleteConfirmModal) {
+            closeModal();
+        }
+    });
+    
+    // Prevent clicks inside modal content from closing the modal
+    const modalContent = deleteConfirmModal.querySelector('.modal-content');
+    if (modalContent) {
+        modalContent.addEventListener('click', function(e) {
+            e.stopPropagation();
+        });
+    }
+}
+
+// Show delete confirmation modal
+function showDeleteConfirmModal() {
+    const deleteConfirmModal = document.getElementById('deleteConfirmModal');
+    if (!deleteConfirmModal) return;
+    
+    deleteConfirmModal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
 }
 
 // Render activity log

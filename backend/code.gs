@@ -144,8 +144,8 @@ function doPost(e) {
 function handleCreateBooking(postData) {
   const sheet = getSheet();
   
-  // Validate required fields
-  if (!postData.guestName || !postData.room || !postData.startDate || !postData.endDate || !postData.pin) {
+  // Validate required fields (PIN is now optional)
+  if (!postData.guestName || !postData.room || !postData.startDate || !postData.endDate) {
     return ContentService
       .createTextOutput(JSON.stringify({
         success: false,
@@ -154,9 +154,24 @@ function handleCreateBooking(postData) {
       .setMimeType(ContentService.MimeType.JSON);
   }
   
-  // Validate room
+  // Validate room - can be "Entire House", single room, or comma-separated rooms
   const validRooms = ['Entire House', 'Master', 'Twin', 'Bunk'];
-  if (!validRooms.includes(postData.room)) {
+  const roomValue = postData.room;
+  
+  // Check if it's a comma-separated list of rooms
+  if (roomValue.includes(',')) {
+    const rooms = roomValue.split(',').map(r => r.trim());
+    // Validate all rooms in the list are valid
+    const invalidRooms = rooms.filter(r => !validRooms.includes(r));
+    if (invalidRooms.length > 0) {
+      return ContentService
+        .createTextOutput(JSON.stringify({
+          success: false,
+          message: 'Invalid room selection: ' + invalidRooms.join(', ')
+        }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+  } else if (!validRooms.includes(roomValue)) {
     return ContentService
       .createTextOutput(JSON.stringify({
         success: false,
@@ -168,9 +183,14 @@ function handleCreateBooking(postData) {
   // Check for date conflicts (optional validation)
   const hasConflict = checkBookingConflict(sheet, postData.room, postData.startDate, postData.endDate, null);
   if (hasConflict) {
-    const conflictMessage = postData.room === 'Entire House' 
-      ? 'The entire house is already booked for the selected dates'
-      : 'This room is already booked for the selected dates';
+    let conflictMessage;
+    if (postData.room === 'Entire House') {
+      conflictMessage = 'The entire house is already booked for the selected dates';
+    } else if (postData.room.includes(',')) {
+      conflictMessage = 'One or more of the selected rooms are already booked for the selected dates';
+    } else {
+      conflictMessage = 'This room is already booked for the selected dates';
+    }
     return ContentService
       .createTextOutput(JSON.stringify({
         success: false,
@@ -241,24 +261,43 @@ function handleUpdateBooking(postData) {
       .setMimeType(ContentService.MimeType.JSON);
   }
   
-  // Get existing booking to verify PIN (if provided)
+  // Get existing booking to verify PIN (if provided and booking has a PIN)
   const existingRow = sheet.getRange(rowNum, 1, 1, 6).getValues()[0];
-  const existingPin = existingRow[5] || '';
+  const existingPin = String(existingRow[5] || '').replace(/\s+/g, ' ').trim();
   
-  // If PIN is provided, verify it
-  if (postData.pin && postData.pin !== existingPin) {
-    return ContentService
-      .createTextOutput(JSON.stringify({
-        success: false,
-        message: 'Invalid PIN code'
-      }))
-      .setMimeType(ContentService.MimeType.JSON);
+  // If booking has a PIN and a PIN is provided in the request, verify it
+  // If booking has no PIN, skip verification
+  if (existingPin !== '' && postData.pin) {
+    const providedPin = String(postData.pin || '').replace(/\s+/g, ' ').trim();
+    if (providedPin !== existingPin) {
+      return ContentService
+        .createTextOutput(JSON.stringify({
+          success: false,
+          message: 'Invalid PIN code'
+        }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
   }
   
-  // Validate room if provided
+  // Validate room if provided - can be "Entire House", single room, or comma-separated rooms
   if (postData.room) {
     const validRooms = ['Entire House', 'Master', 'Twin', 'Bunk'];
-    if (!validRooms.includes(postData.room)) {
+    const roomValue = postData.room;
+    
+    // Check if it's a comma-separated list of rooms
+    if (roomValue.includes(',')) {
+      const rooms = roomValue.split(',').map(r => r.trim());
+      // Validate all rooms in the list are valid
+      const invalidRooms = rooms.filter(r => !validRooms.includes(r));
+      if (invalidRooms.length > 0) {
+        return ContentService
+          .createTextOutput(JSON.stringify({
+            success: false,
+            message: 'Invalid room selection: ' + invalidRooms.join(', ')
+          }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+    } else if (!validRooms.includes(roomValue)) {
       return ContentService
         .createTextOutput(JSON.stringify({
           success: false,
@@ -272,9 +311,14 @@ function handleUpdateBooking(postData) {
   if (postData.room && postData.startDate && postData.endDate) {
     const hasConflict = checkBookingConflict(sheet, postData.room, postData.startDate, postData.endDate, rowNum);
     if (hasConflict) {
-      const conflictMessage = postData.room === 'Entire House' 
-        ? 'The entire house is already booked for the selected dates'
-        : 'This room is already booked for the selected dates';
+      let conflictMessage;
+      if (postData.room === 'Entire House') {
+        conflictMessage = 'The entire house is already booked for the selected dates';
+      } else if (postData.room.includes(',')) {
+        conflictMessage = 'One or more of the selected rooms are already booked for the selected dates';
+      } else {
+        conflictMessage = 'This room is already booked for the selected dates';
+      }
       return ContentService
         .createTextOutput(JSON.stringify({
           success: false,
@@ -553,19 +597,27 @@ function checkBookingConflict(sheet, room, startDate, endDate, excludeRowNum) {
     
     if (!datesOverlap) continue; // No date overlap, skip
     
-    // If booking "Entire House", conflict with any existing booking
-    if (room === 'Entire House') {
+    // Parse new booking rooms (could be "Entire House", single room, or comma-separated)
+    const newRooms = room === 'Entire House' ? ['Entire House'] : room.split(',').map(r => r.trim());
+    
+    // Parse existing booking rooms
+    const existingRooms = existingRoom === 'Entire House' ? ['Entire House'] : existingRoom.split(',').map(r => r.trim());
+    
+    // If new booking is "Entire House", conflict with any existing booking
+    if (newRooms.includes('Entire House')) {
       return true; // Conflict found
     }
     
     // If existing booking is "Entire House", conflict with any new booking
-    if (existingRoom === 'Entire House') {
+    if (existingRooms.includes('Entire House')) {
       return true; // Conflict found
     }
     
-    // If same room, conflict
-    if (existingRoom === room) {
-      return true; // Conflict found
+    // Check if any room in new booking conflicts with any room in existing booking
+    for (let i = 0; i < newRooms.length; i++) {
+      if (existingRooms.includes(newRooms[i])) {
+        return true; // Conflict found
+      }
     }
   }
   
