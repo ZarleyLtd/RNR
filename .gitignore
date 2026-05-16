@@ -17,3 +17,6 @@ npm-debug.log*
 # Environment variables (if you add any)
 .env
 .env.local
+
+# Supabase CLI local state
+supabase/.temp/

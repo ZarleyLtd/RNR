@@ -1,8 +1,9 @@
 # Holiday Home Booking Project Rules
-- Environment: Static Frontend (GitHub Pages) + Backend (Google Apps Script).
+- Environment: Static Frontend (GitHub Pages) + Backend (Supabase Edge Function).
 - Cost Constraint: $0 (No paid tiers).
-- Styling: Tailwind CSS (Modern, clean "Airbnb" aesthetic).
-- Calendar Library: FullCalendar.io (Resource Timeline view).
-- Data Flow: Frontend -> Fetch API -> Google Apps Script Web App -> Google Sheets.
-- Formatting: Use ISO 8601 for all date handling to avoid timezone issues.
-- Security: Implement a simple "Family Access Code" stored in a constant.
+- Styling: Tailwind CSS (Modern, clean "Airbnb" aesthetic with coastal theme).
+- Calendar: Custom-built multi-month calendar (12 months ahead, horizontal scroll).
+- Data Flow: Frontend -> fetch -> Supabase Edge Function (rnr-api) -> PostgREST (schema: rnr).
+- Formatting: Use ISO 8601 (YYYY-MM-DD) for all date handling to avoid timezone issues.
+- Security: Family/Admin passwords (Edge Function secrets) + optional PIN codes per booking.
+- Features: Room booking (Master/Twin/Bunk/Entire House), conflict detection, activity logging, admin dashboard.

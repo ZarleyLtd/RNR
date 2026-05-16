@@ -1,0 +1,10 @@
+# Supabase local dev config (optional). Deploy migrations with: supabase db push
+# Edge Function: supabase functions deploy rnr-api
+
+project_id = "apps"
+
+[api]
+enabled = true
+
+[functions.rnr-api]
+verify_jwt = false

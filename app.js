@@ -1,9 +1,38 @@
-// Default passwords (will be overridden by settings from backend)
-let FAMILY_PASSWORD = 'rnr';
-let ADMIN_PASSWORD = 'rnrAdmin';
+// API helpers (Supabase Edge Function rnr-api)
+function getApiUrl() {
+    const url = window.RNR_CONFIG && window.RNR_CONFIG.API_URL;
+    if (!url) {
+        throw new Error('API_URL is not configured in assets/js/config.js');
+    }
+    return url.replace(/\/$/, '');
+}
 
-// Placeholder API URL - Replace with your Google Apps Script Web App URL
-const API_URL = 'https://script.google.com/macros/s/AKfycbyenccYwHjyj6bRS3QWjq_0Ve_rVOTEwIb6xCm-pYPWorb0JxsJxqoDfsXpioqNvtOb/exec';
+function unwrapApiResponse(res) {
+    if (!res) throw new Error('Empty response');
+    if (res.error) throw new Error(res.error);
+    return res.data;
+}
+
+async function apiGet(action, params = {}) {
+    const qs = new URLSearchParams({ action, ...params });
+    const response = await fetch(`${getApiUrl()}?${qs}`);
+    const json = await response.json();
+    return unwrapApiResponse(json);
+}
+
+async function apiPost(action, body = {}) {
+    const response = await fetch(getApiUrl(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+        body: JSON.stringify({ action, ...body })
+    });
+    const json = await response.json();
+    return unwrapApiResponse(json);
+}
+
+function getAuthPassword() {
+    return sessionStorage.getItem('rnrAuth') || '';
+}
 
 // Calendar state
 let currentDate = new Date();
@@ -40,41 +69,21 @@ let currentEditingBooking = null;
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
-    // Load settings first, then initialize password check
-    loadSettings().then(() => {
-        initializePasswordCheck();
-        initializeBookingModal();
-        initializeCalendar();
-        initializeMessageToast();
-        initializeGuestNameSelect();
-        initializeRoomToggles();
-        initializeProceedButton();
-        initializePinVerificationModal();
-        initializeEditBookingModal();
-        initializeActivityLogModal();
-        initializeDeleteConfirmModal();
-        loadBookings();
-        loadActivityLog();
-        updateActivityLogButtonVisibility();
-    });
+    initializePasswordCheck();
+    initializeBookingModal();
+    initializeCalendar();
+    initializeMessageToast();
+    initializeGuestNameSelect();
+    initializeRoomToggles();
+    initializeProceedButton();
+    initializePinVerificationModal();
+    initializeEditBookingModal();
+    initializeActivityLogModal();
+    initializeDeleteConfirmModal();
+    loadBookings();
+    loadActivityLog();
+    updateActivityLogButtonVisibility();
 });
-
-// Load settings from backend
-async function loadSettings() {
-    try {
-        const response = await fetch(`${API_URL}?action=settings`);
-        if (response.ok) {
-            const data = await response.json();
-            if (data.success && data.settings) {
-                FAMILY_PASSWORD = data.settings['Family Password'] || 'rnr';
-                ADMIN_PASSWORD = data.settings['Admin Password'] || 'rnrAdmin';
-            }
-        }
-    } catch (error) {
-        console.warn('Could not load settings from backend, using defaults:', error);
-        // Continue with default passwords
-    }
-}
 
 // Password Check
 function initializePasswordCheck() {
@@ -84,58 +93,40 @@ function initializePasswordCheck() {
     const passwordError = document.getElementById('passwordError');
     const mainContent = document.getElementById('mainContent');
     
-    // Check if password is already stored and valid
-    const storedPassword = sessionStorage.getItem('familyAccess');
-    const storedAdminStatus = sessionStorage.getItem('isAdmin') === 'true';
-    
-    // Validate stored password against current settings
-    if (storedPassword) {
-        if (storedPassword === FAMILY_PASSWORD) {
-            // Valid family password
-            passwordOverlay.classList.add('hidden');
-            mainContent.classList.remove('hidden');
-            updateActivityLogButtonVisibility();
-            return;
-        } else if (storedPassword === ADMIN_PASSWORD && storedAdminStatus) {
-            // Valid admin password
-            passwordOverlay.classList.add('hidden');
-            mainContent.classList.remove('hidden');
-            updateActivityLogButtonVisibility();
-            return;
-        } else {
-            // Stored password no longer valid (settings changed), clear it
-            sessionStorage.removeItem('familyAccess');
-            sessionStorage.removeItem('isAdmin');
+    // Restore session if role was stored from a previous login this session
+    const storedRole = sessionStorage.getItem('rnrRole');
+    const storedAuth = sessionStorage.getItem('rnrAuth');
+    if (storedRole && storedAuth) {
+        passwordOverlay.classList.add('hidden');
+        mainContent.classList.remove('hidden');
+        updateActivityLogButtonVisibility();
+        if (storedRole === 'admin') {
+            fetchActivityLogFromServer();
         }
+        return;
     }
     
-    passwordSubmit.addEventListener('click', function() {
+    passwordSubmit.addEventListener('click', async function() {
         const inputPassword = passwordInput.value.trim();
-        let isAdmin = false;
-        let isValidPassword = false;
+        passwordSubmit.disabled = true;
         
-        // Check if it's the admin password
-        if (inputPassword === ADMIN_PASSWORD) {
-            isAdmin = true;
-            isValidPassword = true;
-        } 
-        // Check if it's the family password
-        else if (inputPassword === FAMILY_PASSWORD) {
-            isAdmin = false;
-            isValidPassword = true;
-        }
-        
-        if (isValidPassword) {
-            sessionStorage.setItem('familyAccess', inputPassword);
-            sessionStorage.setItem('isAdmin', isAdmin.toString());
+        try {
+            const data = await apiPost('verifyPassword', { password: inputPassword });
+            sessionStorage.setItem('rnrRole', data.role);
+            sessionStorage.setItem('rnrAuth', inputPassword);
             passwordOverlay.classList.add('hidden');
             mainContent.classList.remove('hidden');
             passwordError.classList.add('hidden');
             updateActivityLogButtonVisibility();
-        } else {
+            if (data.role === 'admin') {
+                await fetchActivityLogFromServer();
+            }
+        } catch (error) {
             passwordError.classList.remove('hidden');
             passwordInput.value = '';
             passwordInput.focus();
+        } finally {
+            passwordSubmit.disabled = false;
         }
     });
     
@@ -148,7 +139,7 @@ function initializePasswordCheck() {
 
 // Check if current user is admin
 function isAdmin() {
-    return sessionStorage.getItem('isAdmin') === 'true';
+    return sessionStorage.getItem('rnrRole') === 'admin';
 }
 
 // Update activity log button visibility based on admin status
@@ -385,23 +376,16 @@ function formatDateDisplay(date) {
 // Load bookings from API
 async function loadBookings() {
     try {
-        const response = await fetch(`${API_URL}?action=get`);
-        if (response.ok) {
-            const data = await response.json();
-            if (data.success && data.bookings) {
-                bookings = data.bookings;
-                renderCalendar();
-                renderBookingsList();
-                // Restore date selection visual state after re-render
-                if (selectedCheckin || selectedCheckout) {
-                    updateCalendarSelection();
-                    updateProceedButton();
-                }
-            }
+        const data = await apiGet('getBookings');
+        bookings = Array.isArray(data) ? data : [];
+        renderCalendar();
+        renderBookingsList();
+        if (selectedCheckin || selectedCheckout) {
+            updateCalendarSelection();
+            updateProceedButton();
         }
     } catch (error) {
         console.error('Error loading bookings:', error);
-        // Continue without bookings if API is not available
     }
 }
 
@@ -597,79 +581,43 @@ function initializeBookingModal() {
         submitButtonText.classList.add('hidden');
         submitButtonLoading.classList.remove('hidden');
         
-        // Submit booking
         try {
-            // Use URL-encoded form data to avoid CORS preflight issues
-            // Google Apps Script Web Apps handle form data better than JSON POST
-            const formBody = new URLSearchParams();
-            formBody.append('action', 'create');
-            formBody.append('guestName', formData.guestName);
-            formBody.append('room', formData.room);
-            formBody.append('startDate', formData.startDate);
-            formBody.append('endDate', formData.endDate);
-            formBody.append('notes', formData.notes);
-            formBody.append('pin', formData.pin);
-            
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                mode: 'cors',
-                redirect: 'follow',
-                credentials: 'omit',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: formBody.toString()
-            }).catch(async (fetchError) => {
-                throw fetchError;
+            const result = await apiPost('createBooking', {
+                authPassword: getAuthPassword(),
+                guestName: formData.guestName,
+                room: formData.room,
+                startDate: formData.startDate,
+                endDate: formData.endDate,
+                notes: formData.notes,
+                pin: formData.pin
             });
             
-            if (response.ok) {
-                let result;
-                try {
-                    const responseText = await response.text();
-                    result = JSON.parse(responseText);
-                } catch (parseError) {
-                    throw parseError;
-                }
-                
-                if (result.success) {
-                    // Log activity
-                    logActivity('create', {
-                        guestName: formData.guestName,
-                        room: formData.room,
-                        startDate: formData.startDate,
-                        endDate: formData.endDate,
-                        notes: formData.notes
-                    }, result.bookingId);
-                    
-                    showMessage('Booking successfully created!', 'success');
-                    bookingModal.classList.add('hidden');
-                    bookingForm.reset();
-                    document.body.style.overflow = '';
-                    // Reset date selection
-                    selectedCheckin = null;
-                    selectedCheckout = null;
-                    updateCalendarSelection();
-                    updateProceedButton();
-                    const dateSelectionPanel = document.getElementById('dateSelectionPanel');
-                    if (dateSelectionPanel) {
-                        dateSelectionPanel.classList.add('hidden');
-                    }
-                    // Reload bookings to show the new one
-                    loadBookings();
-                } else {
-                    showMessage(result.message || 'Failed to create booking', 'error');
-                }
-            } else {
-                showMessage('Error connecting to server', 'error');
+            logActivity('create', {
+                guestName: formData.guestName,
+                room: formData.room,
+                startDate: formData.startDate,
+                endDate: formData.endDate,
+                notes: formData.notes
+            }, result.bookingId);
+            
+            showMessage('Booking successfully created!', 'success');
+            bookingModal.classList.add('hidden');
+            bookingForm.reset();
+            document.body.style.overflow = '';
+            selectedCheckin = null;
+            selectedCheckout = null;
+            updateCalendarSelection();
+            updateProceedButton();
+            const dateSelectionPanel = document.getElementById('dateSelectionPanel');
+            if (dateSelectionPanel) {
+                dateSelectionPanel.classList.add('hidden');
             }
+            loadBookings();
         } catch (error) {
             console.error('Error submitting booking:', error);
-            
-            // Provide more specific error message based on error type
-            let errorMsg = 'Error submitting booking. Please try again.';
+            let errorMsg = error.message || 'Error submitting booking. Please try again.';
             if (error.message === 'Failed to fetch') {
-                errorMsg = 'Network error: Could not connect to server. Please check your internet connection and ensure the Google Apps Script is deployed correctly.';
+                errorMsg = 'Network error: Could not connect to server. Please check your internet connection.';
             }
             showMessage(errorMsg, 'error');
         } finally {
@@ -1455,59 +1403,36 @@ async function updateBooking() {
     updateButtonLoading.classList.remove('hidden');
     
     try {
-        const formBody = new URLSearchParams();
-        formBody.append('action', 'update');
-        formBody.append('bookingId', formData.bookingId);
-        formBody.append('guestName', formData.guestName);
-        formBody.append('room', formData.room);
-        formBody.append('startDate', formData.startDate);
-        formBody.append('endDate', formData.endDate);
-        formBody.append('notes', formData.notes);
-        
-        const response = await fetch(API_URL, {
-            method: 'POST',
-            mode: 'cors',
-            redirect: 'follow',
-            credentials: 'omit',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: formBody.toString()
+        await apiPost('updateBooking', {
+            authPassword: getAuthPassword(),
+            bookingId: formData.bookingId,
+            guestName: formData.guestName,
+            room: formData.room,
+            startDate: formData.startDate,
+            endDate: formData.endDate,
+            notes: formData.notes
         });
         
-        if (response.ok) {
-            const responseText = await response.text();
-            const result = JSON.parse(responseText);
-            
-            if (result.success) {
-                // Log activity
-                logActivity('update', {
-                    old: {
-                        guestName: currentEditingBooking.guestName,
-                        room: currentEditingBooking.room,
-                        startDate: currentEditingBooking.startDate,
-                        endDate: currentEditingBooking.endDate,
-                        notes: currentEditingBooking.notes
-                    },
-                    new: formData
-                }, formData.bookingId);
-                
-                showMessage('Booking successfully updated!', 'success');
-                editModal.classList.add('hidden');
-                document.body.style.overflow = '';
-                currentEditingBooking = null;
-                loadBookings();
-            } else {
-                // Close edit modal first so error message is visible
-                editModal.classList.add('hidden');
-                showMessage(result.message || 'Failed to update booking', 'error');
-            }
-        } else {
-            showMessage('Error connecting to server', 'error');
-        }
+        logActivity('update', {
+            old: {
+                guestName: currentEditingBooking.guestName,
+                room: currentEditingBooking.room,
+                startDate: currentEditingBooking.startDate,
+                endDate: currentEditingBooking.endDate,
+                notes: currentEditingBooking.notes
+            },
+            new: formData
+        }, formData.bookingId);
+        
+        showMessage('Booking successfully updated!', 'success');
+        editModal.classList.add('hidden');
+        document.body.style.overflow = '';
+        currentEditingBooking = null;
+        loadBookings();
     } catch (error) {
         console.error('Error updating booking:', error);
-        showMessage('Error updating booking. Please try again.', 'error');
+        editModal.classList.add('hidden');
+        showMessage(error.message || 'Error updating booking. Please try again.', 'error');
     } finally {
         updateButton.disabled = false;
         updateButtonText.classList.remove('hidden');
@@ -1547,53 +1472,23 @@ async function deleteBooking() {
     deleteButton.textContent = 'Deleting...';
     
     try {
-        const formBody = new URLSearchParams();
-        formBody.append('action', 'delete');
-        formBody.append('bookingId', String(bookingId));
-        
-        const response = await fetch(API_URL, {
-            method: 'POST',
-            mode: 'cors',
-            redirect: 'follow',
-            credentials: 'omit',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: formBody.toString()
+        await apiPost('deleteBooking', {
+            authPassword: getAuthPassword(),
+            bookingId: String(bookingId)
         });
         
-        if (response.ok) {
-            const responseText = await response.text();
-            let result;
-            try {
-                result = JSON.parse(responseText);
-            } catch (parseError) {
-                console.error('Error parsing delete response:', parseError);
-                throw new Error('Invalid response from server');
-            }
-            
-            if (result.success) {
-                // Log activity
-                logActivity('delete', bookingData, bookingId);
-                
-                showMessage('Booking successfully deleted!', 'success');
-                if (editModal) {
-                    editModal.classList.add('hidden');
-                }
-                document.body.style.overflow = '';
-                currentEditingBooking = null;
-                loadBookings();
-            } else {
-                showMessage(result.message || 'Failed to delete booking', 'error');
-            }
-        } else {
-            const errorText = await response.text().catch(() => 'Unknown error');
-            console.error('Delete request failed:', response.status, errorText);
-            showMessage('Error connecting to server', 'error');
+        logActivity('delete', bookingData, bookingId);
+        
+        showMessage('Booking successfully deleted!', 'success');
+        if (editModal) {
+            editModal.classList.add('hidden');
         }
+        document.body.style.overflow = '';
+        currentEditingBooking = null;
+        loadBookings();
     } catch (error) {
         console.error('Error deleting booking:', error);
-        showMessage('Error deleting booking. Please try again.', 'error');
+        showMessage(error.message || 'Error deleting booking. Please try again.', 'error');
     } finally {
         // Always reset button state, even if there was an error
         if (deleteButton) {
@@ -1604,65 +1499,50 @@ async function deleteBooking() {
 }
 
 // Activity logging functions
-function logActivity(action, data, bookingId) {
+function buildActivityEntry(action, data, bookingId) {
     const timestamp = new Date().toISOString();
-    const userAgent = navigator.userAgent;
-    const sessionId = sessionStorage.getItem('familyAccess') || 'unknown';
-    
-    // Try to get IP (won't work client-side, but structure is ready for backend)
-    const activity = {
+    return {
         id: Date.now(),
         timestamp: timestamp,
-        action: action, // 'create', 'update', 'delete'
+        action: action,
         bookingId: bookingId,
         data: data,
         sessionInfo: {
-            sessionId: sessionId,
-            userAgent: userAgent,
+            sessionId: (sessionStorage.getItem('rnrAuth') || 'unknown').substring(0, 8),
+            userAgent: navigator.userAgent,
             language: navigator.language,
             platform: navigator.platform,
             screenResolution: `${window.screen.width}x${window.screen.height}`
         }
     };
-    
-    activityLog.unshift(activity); // Add to beginning
-    
-    // Keep only last 1000 entries
-    if (activityLog.length > 1000) {
-        activityLog = activityLog.slice(0, 1000);
-    }
-    
-    // Save to localStorage
+}
+
+function cacheActivityLogLocally() {
     try {
         localStorage.setItem('bookingActivityLog', JSON.stringify(activityLog));
     } catch (e) {
         console.warn('Could not save activity log to localStorage:', e);
     }
-    
-    // Also try to send to API if available
-    try {
-        const formBody = new URLSearchParams();
-        formBody.append('action', 'logActivity');
-        formBody.append('activity', JSON.stringify(activity));
-        
-        fetch(API_URL, {
-            method: 'POST',
-            mode: 'cors',
-            redirect: 'follow',
-            credentials: 'omit',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: formBody.toString()
-        }).catch(() => {
-            // Silently fail if API is not available
-        });
-    } catch (e) {
-        // Silently fail
-    }
 }
 
-// Load activity log
+function logActivity(action, data, bookingId) {
+    const activity = buildActivityEntry(action, data, bookingId);
+    
+    activityLog.unshift(activity);
+    if (activityLog.length > 1000) {
+        activityLog = activityLog.slice(0, 1000);
+    }
+    cacheActivityLogLocally();
+    
+    apiPost('logActivity', {
+        authPassword: getAuthPassword(),
+        activity: activity
+    }).catch(() => {
+        // Silently fail if API is not available
+    });
+}
+
+// Load activity log from localStorage (fallback cache)
 function loadActivityLog() {
     try {
         const stored = localStorage.getItem('bookingActivityLog');
@@ -1672,6 +1552,22 @@ function loadActivityLog() {
     } catch (e) {
         console.warn('Could not load activity log from localStorage:', e);
         activityLog = [];
+    }
+}
+
+// Fetch activity log from Supabase (primary source for admins)
+async function fetchActivityLogFromServer() {
+    if (!isAdmin()) return;
+    try {
+        const data = await apiPost('getActivityLog', {
+            authPassword: getAuthPassword()
+        });
+        if (Array.isArray(data) && data.length > 0) {
+            activityLog = data;
+            cacheActivityLogLocally();
+        }
+    } catch (e) {
+        console.warn('Could not load activity log from server:', e);
     }
 }
 
@@ -1693,7 +1589,8 @@ function initializeActivityLogModal() {
     }
     
     if (viewActivityLogButton) {
-        viewActivityLogButton.addEventListener('click', function() {
+        viewActivityLogButton.addEventListener('click', async function() {
+            await fetchActivityLogFromServer();
             renderActivityLog();
             activityLogModal.classList.remove('hidden');
             document.body.style.overflow = 'hidden';
@@ -1825,7 +1722,7 @@ function renderActivityLog() {
                     ${(activity.data.notes || activity.data.old?.notes) ? `<div class="mt-1 italic text-xs">Notes: ${escapeHtml(activity.data.notes || activity.data.old?.notes || '')}</div>` : ''}
                 </div>
                 <div class="text-xs text-[#94a3b8] mt-2 pt-2 border-t border-gray-100">
-                    Session: ${escapeHtml(activity.sessionInfo.sessionId.substring(0, 8))}... | 
+                    Session: ${escapeHtml(String(activity.sessionInfo?.sessionId || 'unknown').substring(0, 8))}... | 
                     ${escapeHtml(activity.sessionInfo.platform)} | 
                     ${escapeHtml(activity.sessionInfo.language)}
                 </div>
