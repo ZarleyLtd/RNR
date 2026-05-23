@@ -533,15 +533,8 @@
         <div class="container mx-auto px-4 py-8">
             <header class="mb-8 relative">
                 <div class="absolute inset-0 rounded-lg -z-10" style="background-image: url('images/abeeyside greenway.jpg'); background-size: cover; background-position: center;"></div>
-                <div class="relative p-6 rounded-lg flex justify-between items-center">
+                <div class="relative p-6 rounded-lg">
                     <h1 class="text-4xl font-semibold text-white mb-2" style="text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 0, 0, 0.5);">R&R @ Abbeyside</h1>
-                    <button 
-                        id="viewActivityLogButton"
-                        class="bg-white/20 backdrop-blur-sm text-white px-4 py-2 rounded-lg font-medium hover:bg-white/30 transition-colors shadow-md hidden"
-                        style="text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);"
-                    >
-                        View Activity Log
-                    </button>
                 </div>
             </header>
             
@@ -610,6 +603,29 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Admin Section -->
+            <div id="adminSection" class="bg-white rounded-lg shadow-sm border border-gray-200 mt-6 hidden">
+                <div class="p-6">
+                    <h2 class="text-2xl font-semibold text-[#2d3748] mb-4">Admin</h2>
+                    <div class="flex flex-col gap-3">
+                        <button
+                            id="viewActivityLogButton"
+                            class="inline-flex items-center justify-center gap-2 px-4 py-3 bg-[#475569] text-white rounded-lg font-medium hover:bg-[#334155] transition-colors shadow-md hover:shadow-lg"
+                        >
+                            <span class="text-xl">📋</span>
+                            <span>View Activity Log</span>
+                        </button>
+                        <button
+                            id="manageRoomsButton"
+                            class="inline-flex items-center justify-center gap-2 px-4 py-3 bg-[#475569] text-white rounded-lg font-medium hover:bg-[#334155] transition-colors shadow-md hover:shadow-lg"
+                        >
+                            <span class="text-xl">🛏️</span>
+                            <span>Manage Rooms</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
     
@@ -649,40 +665,9 @@
                     <label class="block text-sm font-medium text-[#4a5568] mb-2">
                         Room(s)
                     </label>
-                    <div class="flex gap-3">
-                        <button 
-                            type="button"
-                            id="roomToggleMaster"
-                            data-room="Master"
-                            class="flex-1 px-4 py-3 border-2 rounded-lg font-medium transition-colors room-toggle flex items-center justify-center gap-2"
-                            style="border-color: #e2e8f0; background-color: white; color: #475569;"
-                        >
-                            <span class="text-xl">👑</span>
-                            <span>Master</span>
-                        </button>
-                        <button 
-                            type="button"
-                            id="roomToggleTwin"
-                            data-room="Twin"
-                            class="flex-1 px-4 py-3 border-2 rounded-lg font-medium transition-colors room-toggle flex items-center justify-center gap-2"
-                            style="border-color: #e2e8f0; background-color: white; color: #475569;"
-                        >
-                            <span class="text-xl">🛏️</span>
-                            <span>Twin</span>
-                        </button>
-                        <button 
-                            type="button"
-                            id="roomToggleBunk"
-                            data-room="Bunk"
-                            class="flex-1 px-4 py-3 border-2 rounded-lg font-medium transition-colors room-toggle flex items-center justify-center gap-2"
-                            style="border-color: #e2e8f0; background-color: white; color: #475569;"
-                        >
-                            <span class="text-xl">🚂</span>
-                            <span>Bunk</span>
-                        </button>
-                    </div>
+                    <div id="roomToggles" class="grid grid-cols-2 sm:grid-cols-5 gap-2"></div>
                     <input type="hidden" id="roomSelect" name="room" required />
-                    <p class="text-xs text-[#4a5568] mt-2">Select one or more rooms. All 3 rooms = Entire House.</p>
+                    <p class="text-xs text-[#4a5568] mt-2">Select one or more units. All 5 units = Entire House.</p>
                 </div>
                 
                 <div class="mb-6">
@@ -872,40 +857,9 @@
                     <label class="block text-sm font-medium text-[#4a5568] mb-2">
                         Room(s)
                     </label>
-                    <div class="flex gap-3">
-                        <button 
-                            type="button"
-                            id="editRoomToggleMaster"
-                            data-room="Master"
-                            class="flex-1 px-4 py-3 border-2 rounded-lg font-medium transition-colors edit-room-toggle flex items-center justify-center gap-2"
-                            style="border-color: #e2e8f0; background-color: white; color: #475569;"
-                        >
-                            <span class="text-xl">👑</span>
-                            <span>Master</span>
-                        </button>
-                        <button 
-                            type="button"
-                            id="editRoomToggleTwin"
-                            data-room="Twin"
-                            class="flex-1 px-4 py-3 border-2 rounded-lg font-medium transition-colors edit-room-toggle flex items-center justify-center gap-2"
-                            style="border-color: #e2e8f0; background-color: white; color: #475569;"
-                        >
-                            <span class="text-xl">🛏️</span>
-                            <span>Twin</span>
-                        </button>
-                        <button 
-                            type="button"
-                            id="editRoomToggleBunk"
-                            data-room="Bunk"
-                            class="flex-1 px-4 py-3 border-2 rounded-lg font-medium transition-colors edit-room-toggle flex items-center justify-center gap-2"
-                            style="border-color: #e2e8f0; background-color: white; color: #475569;"
-                        >
-                            <span class="text-xl">🚂</span>
-                            <span>Bunk</span>
-                        </button>
-                    </div>
+                    <div id="editRoomToggles" class="grid grid-cols-2 sm:grid-cols-5 gap-2"></div>
                     <input type="hidden" id="editRoomSelect" name="editRoom" required />
-                    <p class="text-xs text-[#4a5568] mt-2">Select one or more rooms. All 3 rooms = Entire House.</p>
+                    <p class="text-xs text-[#4a5568] mt-2">Select one or more units. All 5 units = Entire House.</p>
                 </div>
                 
                 <div class="mb-4">
@@ -968,6 +922,40 @@
         </div>
     </div>
     
+    <!-- Manage Rooms Modal -->
+    <div id="manageRoomsModal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay">
+        <div class="modal-content rounded-lg shadow-xl p-8 max-w-lg w-full mx-4 max-h-[85vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-semibold text-[#2d3748]">Manage Rooms</h2>
+                <button
+                    id="closeManageRoomsModal"
+                    class="text-[#4a5568] hover:text-[#2d3748] text-2xl font-light"
+                >
+                    ×
+                </button>
+            </div>
+            <p class="text-sm text-[#64748b] mb-4">Update the display name and icon for each room. Room IDs stay the same for existing bookings.</p>
+            <div id="manageRoomsContent" class="space-y-6"></div>
+            <div class="flex gap-3 mt-6">
+                <button
+                    type="button"
+                    id="cancelManageRoomsButton"
+                    class="flex-1 px-4 py-3 border border-gray-300 rounded-lg font-medium hover:bg-gray-50 transition-colors text-[#475569]"
+                >
+                    Cancel
+                </button>
+                <button
+                    type="button"
+                    id="saveManageRoomsButton"
+                    class="flex-1 bg-[#0ea5e9] text-white py-3 rounded-lg font-medium hover:bg-[#0284c7] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
+                >
+                    <span id="saveRoomsButtonText">Save Changes</span>
+                    <span id="saveRoomsButtonLoading" class="hidden">Saving...</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Activity Log Modal -->
     <div id="activityLogModal" class="hidden fixed inset-0 z-50 flex items-center justify-center modal-overlay">
         <div class="modal-content rounded-lg shadow-xl p-8 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">

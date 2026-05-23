@@ -5,7 +5,7 @@ A zero-cost booking system for a holiday home, built with a static frontend (dep
 ## Features
 
 - **Custom Multi-Month Calendar View**: Horizontal scrolling calendar showing 12 months ahead with visual availability indicators
-- **Room Booking Management**: Book individual rooms (Master, Twin, Bunk) or the entire house
+- **Room Booking Management**: Book individual units (3 doubles, 1 single, 1 sofa bed) or the entire house
 - **Smart Conflict Detection**: Prevents double-booking with real-time availability checking
 - **Password Protection**: Family and Admin password authentication (Edge Function secrets)
 - **PIN-Based Booking Security**: Optional PIN codes for individual bookings to protect edits/deletes

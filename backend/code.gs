@@ -155,7 +155,7 @@ function handleCreateBooking(postData) {
   }
   
   // Validate room - can be "Entire House", single room, or comma-separated rooms
-  const validRooms = ['Entire House', 'Master', 'Twin', 'Bunk'];
+  const validRooms = ['Entire House', 'Double1', 'Double2', 'Double3', 'Single', 'Sofabed'];
   const roomValue = postData.room;
   
   // Check if it's a comma-separated list of rooms
@@ -281,7 +281,7 @@ function handleUpdateBooking(postData) {
   
   // Validate room if provided - can be "Entire House", single room, or comma-separated rooms
   if (postData.room) {
-    const validRooms = ['Entire House', 'Master', 'Twin', 'Bunk'];
+    const validRooms = ['Entire House', 'Double1', 'Double2', 'Double3', 'Single', 'Sofabed'];
     const roomValue = postData.room;
     
     // Check if it's a comma-separated list of rooms

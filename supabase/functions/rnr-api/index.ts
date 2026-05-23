@@ -9,7 +9,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const DB_SCHEMA = "rnr";
-const VALID_ROOMS = ["Entire House", "Master", "Twin", "Bunk"];
+const VALID_ROOMS = ["Entire House", "Double1", "Double2", "Double3", "Single", "Sofabed"];
+const ROOM_IDS = ["Double1", "Double2", "Double3", "Single", "Sofabed"];
 const ACTIVITY_LOG_LIMIT = 1000;
 
 const corsHeaders: Record<string, string> = {
@@ -397,6 +398,74 @@ async function getActivityLog(
   });
 }
 
+type RoomSettingRow = {
+  id: string;
+  title: string;
+  icon: string;
+  sort_order: number;
+};
+
+async function getRoomSettings(
+  sb: ReturnType<typeof createClient>,
+): Promise<Array<{ id: string; title: string; icon: string }>> {
+  const { data, error } = await sb
+    .from("room_settings")
+    .select("id, title, icon, sort_order")
+    .order("sort_order", { ascending: true });
+
+  if (error) throw new Error(error.message);
+
+  return ((data || []) as RoomSettingRow[]).map((row) => ({
+    id: row.id,
+    title: row.title,
+    icon: row.icon,
+  }));
+}
+
+async function updateRoomSettings(
+  sb: ReturnType<typeof createClient>,
+  body: Record<string, unknown>,
+) {
+  const role = requireAuth(body.authPassword);
+  if (role !== "admin") throw new Error("Admin access required");
+
+  const rooms = body.rooms;
+  if (!Array.isArray(rooms)) throw new Error("Missing room settings");
+
+  const updates: RoomSettingRow[] = [];
+  for (const entry of rooms) {
+    if (!entry || typeof entry !== "object") {
+      throw new Error("Invalid room settings");
+    }
+    const room = entry as Record<string, unknown>;
+    const id = String(room.id || "");
+    const title = String(room.title || "").trim();
+    const icon = String(room.icon || "").trim();
+
+    if (!ROOM_IDS.includes(id)) {
+      throw new Error("Invalid room id: " + id);
+    }
+    if (!title) throw new Error("Room name is required");
+    if (!icon) throw new Error("Room icon is required");
+
+    updates.push({
+      id,
+      title,
+      icon,
+      sort_order: ROOM_IDS.indexOf(id) + 1,
+    });
+  }
+
+  if (updates.length !== ROOM_IDS.length) {
+    throw new Error("All rooms must be provided");
+  }
+
+  const { error } = await sb.from("room_settings").upsert(updates);
+  if (error) throw new Error(error.message);
+
+  return { message: "Room settings updated successfully" };
+}
+
 async function doGet(
   sb: ReturnType<typeof createClient>,
   url: URL,
@@ -406,6 +475,8 @@ async function doGet(
   try {
     if (action === "getBookings") {
       out.data = await getBookings(sb);
+    } else if (action === "getRoomSettings") {
+      out.data = await getRoomSettings(sb);
     } else {
       throw new Error("Unknown or missing action");
     }
@@ -442,6 +513,8 @@ async function doPost(
       out.data = await logActivity(sb, body);
     } else if (action === "getActivityLog") {
       out.data = await getActivityLog(sb, body);
+    } else if (action === "updateRoomSettings") {
+      out.data = await updateRoomSettings(sb, body);
     } else {
       throw new Error("Unknown or missing action");
     }

@@ -38,11 +38,20 @@ function getAuthPassword() {
 let currentDate = new Date();
 let bookings = [];
 
-// Room configuration
-const ROOMS = [
-    { id: 'Master', title: 'Master Room' },
-    { id: 'Twin', title: 'Twin Room' },
-    { id: 'Bunk', title: 'Bunk Room' }
+// Room configuration (defaults; overridden by server settings when available)
+const DEFAULT_ROOMS = [
+    { id: 'Double1', title: 'Double 1', icon: '👑' },
+    { id: 'Double2', title: 'Double 2', icon: '🌅' },
+    { id: 'Double3', title: 'Double 3', icon: '🌿' },
+    { id: 'Single', title: 'Single', icon: '🛌' },
+    { id: 'Sofabed', title: 'Sofa Bed', icon: '🛋️' }
+];
+
+let ROOMS = DEFAULT_ROOMS.map(room => ({ ...room }));
+
+const ROOM_ICON_OPTIONS = [
+    '👑', '🌅', '🌿', '🛌', '🛋️', '🏠', '🛏️', '🌊', '⭐', '🌸',
+    '🍀', '🌙', '☀️', '🎵', '🐚', '🕯️', '💎', '🦋', '🌺', '🏖️'
 ];
 
 // Guest names configuration
@@ -68,21 +77,23 @@ let activityLog = [];
 let currentEditingBooking = null;
 
 // Initialize the application
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     initializePasswordCheck();
     initializeBookingModal();
     initializeCalendar();
     initializeMessageToast();
     initializeGuestNameSelect();
-    initializeRoomToggles();
     initializeProceedButton();
     initializePinVerificationModal();
     initializeEditBookingModal();
     initializeActivityLogModal();
+    initializeManageRoomsModal();
     initializeDeleteConfirmModal();
+    await loadRoomSettings();
+    initializeRoomToggles();
     loadBookings();
     loadActivityLog();
-    updateActivityLogButtonVisibility();
+    updateAdminSectionVisibility();
 });
 
 // Password Check
@@ -99,7 +110,7 @@ function initializePasswordCheck() {
     if (storedRole && storedAuth) {
         passwordOverlay.classList.add('hidden');
         mainContent.classList.remove('hidden');
-        updateActivityLogButtonVisibility();
+        updateAdminSectionVisibility();
         if (storedRole === 'admin') {
             fetchActivityLogFromServer();
         }
@@ -117,7 +128,7 @@ function initializePasswordCheck() {
             passwordOverlay.classList.add('hidden');
             mainContent.classList.remove('hidden');
             passwordError.classList.add('hidden');
-            updateActivityLogButtonVisibility();
+            updateAdminSectionVisibility();
             if (data.role === 'admin') {
                 await fetchActivityLogFromServer();
             }
@@ -142,16 +153,42 @@ function isAdmin() {
     return sessionStorage.getItem('rnrRole') === 'admin';
 }
 
-// Update activity log button visibility based on admin status
-function updateActivityLogButtonVisibility() {
-    const viewActivityLogButton = document.getElementById('viewActivityLogButton');
-    if (viewActivityLogButton) {
+// Update admin section visibility based on admin status
+function updateAdminSectionVisibility() {
+    const adminSection = document.getElementById('adminSection');
+    if (adminSection) {
         if (isAdmin()) {
-            viewActivityLogButton.classList.remove('hidden');
+            adminSection.classList.remove('hidden');
         } else {
-            viewActivityLogButton.classList.add('hidden');
+            adminSection.classList.add('hidden');
         }
     }
+}
+
+async function loadRoomSettings() {
+    try {
+        const data = await apiGet('getRoomSettings');
+        if (Array.isArray(data) && data.length > 0) {
+            ROOMS = data.map(room => ({
+                id: room.id,
+                title: room.title,
+                icon: room.icon
+            }));
+        }
+    } catch (e) {
+        console.warn('Could not load room settings from server, using defaults:', e);
+        ROOMS = DEFAULT_ROOMS.map(room => ({ ...room }));
+    }
+}
+
+async function saveRoomSettingsToServer(rooms) {
+    await apiPost('updateRoomSettings', {
+        authPassword: getAuthPassword(),
+        rooms
+    });
+    ROOMS = rooms.map(room => ({ ...room }));
+    initializeRoomToggles();
+    renderBookingsList();
 }
 
 // Initialize custom calendar
@@ -415,25 +452,39 @@ function initializeGuestNameSelect() {
     }
 }
 
+// Build room toggle buttons into a container
+function renderRoomToggleButtons(container, toggleClass, onToggle) {
+    if (!container) return;
+    container.innerHTML = '';
+    ROOMS.forEach(room => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.setAttribute('data-room', room.id);
+        button.className = `px-4 py-3 border-2 rounded-lg font-medium transition-colors ${toggleClass} flex items-center justify-center gap-2`;
+        button.style.borderColor = '#e2e8f0';
+        button.style.backgroundColor = 'white';
+        button.style.color = '#475569';
+        button.innerHTML = `<span class="text-xl">${room.icon}</span><span>${room.title}</span>`;
+        button.addEventListener('click', function() {
+            this.classList.toggle('active');
+            onToggle();
+        });
+        container.appendChild(button);
+    });
+}
+
 // Initialize room toggles
 function initializeRoomToggles() {
-    // New booking room toggles
-    const roomToggles = document.querySelectorAll('.room-toggle');
-    roomToggles.forEach(toggle => {
-        toggle.addEventListener('click', function() {
-            this.classList.toggle('active');
-            updateRoomSelection();
-        });
-    });
-    
-    // Edit booking room toggles
-    const editRoomToggles = document.querySelectorAll('.edit-room-toggle');
-    editRoomToggles.forEach(toggle => {
-        toggle.addEventListener('click', function() {
-            this.classList.toggle('active');
-            updateEditRoomSelection();
-        });
-    });
+    renderRoomToggleButtons(
+        document.getElementById('roomToggles'),
+        'room-toggle',
+        updateRoomSelection
+    );
+    renderRoomToggleButtons(
+        document.getElementById('editRoomToggles'),
+        'edit-room-toggle',
+        updateEditRoomSelection
+    );
 }
 
 // Update room selection for new booking
@@ -446,12 +497,10 @@ function updateRoomSelection() {
     const roomSelect = document.getElementById('roomSelect');
     if (!roomSelect) return;
     
-    // If all 3 rooms selected, set as "Entire House"
-    if (selectedRooms.length === 3) {
+    // If all units selected, set as "Entire House"
+    if (selectedRooms.length === ROOMS.length) {
         roomSelect.value = 'Entire House';
     } else if (selectedRooms.length > 0) {
-        // For now, we'll store as comma-separated, but backend will need to handle this
-        // Actually, let's store as "Entire House" if all 3, otherwise as comma-separated
         roomSelect.value = selectedRooms.join(',');
     } else {
         roomSelect.value = '';
@@ -468,8 +517,8 @@ function updateEditRoomSelection() {
     const roomSelect = document.getElementById('editRoomSelect');
     if (!roomSelect) return;
     
-    // If all 3 rooms selected, set as "Entire House"
-    if (selectedRooms.length === 3) {
+    // If all units selected, set as "Entire House"
+    if (selectedRooms.length === ROOMS.length) {
         roomSelect.value = 'Entire House';
     } else if (selectedRooms.length > 0) {
         roomSelect.value = selectedRooms.join(',');
@@ -553,9 +602,9 @@ function initializeBookingModal() {
             return;
         }
         
-        // Determine room value: "Entire House" if all 3, otherwise comma-separated
+        // Determine room value: "Entire House" if all units, otherwise comma-separated
         let roomValue;
-        if (selectedRooms.length === 3) {
+        if (selectedRooms.length === ROOMS.length) {
             roomValue = 'Entire House';
         } else {
             roomValue = selectedRooms.join(',');
@@ -920,13 +969,27 @@ function updateEndDateMin() {
 
 // Get icon for room type
 function getRoomIcon(roomType) {
-    const icons = {
-        'Entire House': '🏠',
-        'Master': '👑',
-        'Twin': '🛏️',
-        'Bunk': '🚂'
-    };
-    return icons[roomType] || '🛏️';
+    if (roomType === 'Entire House') return '🏠';
+    const room = ROOMS.find(r => r.id === roomType);
+    if (room) return room.icon;
+    if (roomType && roomType.includes(',')) {
+        const ids = roomType.split(',').map(r => r.trim());
+        const first = ROOMS.find(r => r.id === ids[0]);
+        return first ? first.icon : '🛏️';
+    }
+    return '🛏️';
+}
+
+function getRoomDisplayName(roomType) {
+    if (roomType === 'Entire House') return 'Entire House';
+    if (roomType && roomType.includes(',')) {
+        return roomType.split(',').map(id => {
+            const room = ROOMS.find(r => r.id === id.trim());
+            return room ? room.title : id.trim();
+        }).join(', ');
+    }
+    const room = ROOMS.find(r => r.id === roomType);
+    return room ? room.title : roomType;
 }
 
 // Render bookings list (current month to 12 months ahead)
@@ -1031,7 +1094,7 @@ function renderBookingsList() {
                     <div class="flex-1">
                         <div class="font-semibold text-[#1e293b] mb-1">${escapeHtml(booking.guestName)}</div>
                         <div class="text-sm text-[#475569]">
-                            <span class="font-medium">${booking.room}</span> • 
+                            <span class="font-medium">${escapeHtml(getRoomDisplayName(booking.room))}</span> • 
                             ${formatBookingDateRange(booking.startDate, booking.endDate)}
                         </div>
                         ${booking.notes ? `<div class="text-xs text-[#64748b] mt-1 italic">${escapeHtml(booking.notes)}</div>` : ''}
@@ -1311,7 +1374,7 @@ function openEditBookingModal(booking) {
     // Handle room selection - parse room value and set toggles
     const roomValue = booking.room || '';
     if (roomValue === 'Entire House') {
-        // All 3 rooms selected
+        // All units selected
         document.querySelectorAll('.edit-room-toggle').forEach(toggle => {
             toggle.classList.add('active');
         });
@@ -1374,9 +1437,9 @@ async function updateBooking() {
         return;
     }
     
-    // Determine room value: "Entire House" if all 3, otherwise comma-separated
+    // Determine room value: "Entire House" if all units, otherwise comma-separated
     let roomValue;
-    if (selectedRooms.length === 3) {
+    if (selectedRooms.length === ROOMS.length) {
         roomValue = 'Entire House';
     } else {
         roomValue = selectedRooms.join(',');
@@ -1599,6 +1662,152 @@ function initializeActivityLogModal() {
     
     activityLogModal.addEventListener('click', function(e) {
         if (e.target === activityLogModal) {
+            closeModal();
+        }
+    });
+}
+
+// Initialize manage rooms modal
+function initializeManageRoomsModal() {
+    const manageRoomsModal = document.getElementById('manageRoomsModal');
+    const closeManageRoomsModal = document.getElementById('closeManageRoomsModal');
+    const cancelManageRoomsButton = document.getElementById('cancelManageRoomsButton');
+    const saveManageRoomsButton = document.getElementById('saveManageRoomsButton');
+    const manageRoomsButton = document.getElementById('manageRoomsButton');
+
+    if (!manageRoomsModal) return;
+
+    let draftRooms = [];
+
+    const closeModal = () => {
+        manageRoomsModal.classList.add('hidden');
+        document.body.style.overflow = '';
+    };
+
+    const renderManageRoomsForm = () => {
+        const manageRoomsContent = document.getElementById('manageRoomsContent');
+        if (!manageRoomsContent) return;
+
+        let html = '';
+        draftRooms.forEach((room, index) => {
+            const iconButtons = ROOM_ICON_OPTIONS.map(icon => {
+                const selected = icon === room.icon;
+                return `<button type="button" data-room-index="${index}" data-icon="${icon}" class="room-icon-option w-10 h-10 text-xl rounded-lg border-2 transition-colors ${selected ? 'border-[#0ea5e9] bg-[#e0f2fe]' : 'border-gray-200 hover:border-[#0ea5e9] hover:bg-gray-50'}">${icon}</button>`;
+            }).join('');
+
+            html += `
+                <div class="border border-gray-200 rounded-lg p-4" data-room-row="${index}">
+                    <div class="flex items-center gap-2 mb-3">
+                        <span class="text-2xl">${room.icon}</span>
+                        <span class="text-xs font-medium uppercase tracking-wide text-[#94a3b8]">${escapeHtml(room.id)}</span>
+                    </div>
+                    <label class="block text-sm font-medium text-[#4a5568] mb-2" for="roomTitle-${index}">
+                        Display Name
+                    </label>
+                    <input
+                        type="text"
+                        id="roomTitle-${index}"
+                        data-room-index="${index}"
+                        class="room-title-input w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#0ea5e9] mb-3"
+                        value="${escapeHtml(room.title)}"
+                        maxlength="40"
+                    />
+                    <label class="block text-sm font-medium text-[#4a5568] mb-2">
+                        Icon
+                    </label>
+                    <div class="grid grid-cols-5 sm:grid-cols-10 gap-2">
+                        ${iconButtons}
+                    </div>
+                </div>
+            `;
+        });
+
+        manageRoomsContent.innerHTML = html;
+
+        manageRoomsContent.querySelectorAll('.room-title-input').forEach(input => {
+            input.addEventListener('input', function() {
+                const roomIndex = parseInt(this.getAttribute('data-room-index'), 10);
+                draftRooms[roomIndex].title = this.value;
+            });
+        });
+
+        manageRoomsContent.querySelectorAll('.room-icon-option').forEach(button => {
+            button.addEventListener('click', function() {
+                const roomIndex = parseInt(this.getAttribute('data-room-index'), 10);
+                const icon = this.getAttribute('data-icon');
+                draftRooms[roomIndex].icon = icon;
+
+                const row = manageRoomsContent.querySelector(`[data-room-row="${roomIndex}"]`);
+                if (row) {
+                    row.querySelector('.text-2xl').textContent = icon;
+                    row.querySelectorAll('.room-icon-option').forEach(option => {
+                        const isSelected = option.getAttribute('data-icon') === icon;
+                        option.classList.toggle('border-[#0ea5e9]', isSelected);
+                        option.classList.toggle('bg-[#e0f2fe]', isSelected);
+                        option.classList.toggle('border-gray-200', !isSelected);
+                        option.classList.toggle('hover:border-[#0ea5e9]', !isSelected);
+                        option.classList.toggle('hover:bg-gray-50', !isSelected);
+                    });
+                }
+            });
+        });
+    };
+
+    const openModal = () => {
+        draftRooms = ROOMS.map(room => ({ ...room }));
+        renderManageRoomsForm();
+        manageRoomsModal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    };
+
+    if (manageRoomsButton) {
+        manageRoomsButton.addEventListener('click', openModal);
+    }
+
+    if (closeManageRoomsModal) {
+        closeManageRoomsModal.addEventListener('click', closeModal);
+    }
+
+    if (cancelManageRoomsButton) {
+        cancelManageRoomsButton.addEventListener('click', closeModal);
+    }
+
+    if (saveManageRoomsButton) {
+        saveManageRoomsButton.addEventListener('click', async function() {
+            const saveRoomsButtonText = document.getElementById('saveRoomsButtonText');
+            const saveRoomsButtonLoading = document.getElementById('saveRoomsButtonLoading');
+
+            const trimmedRooms = draftRooms.map(room => ({
+                id: room.id,
+                title: room.title.trim(),
+                icon: room.icon
+            }));
+
+            if (trimmedRooms.some(room => !room.title)) {
+                showMessage('Each room must have a display name.', 'error');
+                return;
+            }
+
+            saveManageRoomsButton.disabled = true;
+            if (saveRoomsButtonText) saveRoomsButtonText.classList.add('hidden');
+            if (saveRoomsButtonLoading) saveRoomsButtonLoading.classList.remove('hidden');
+
+            try {
+                await saveRoomSettingsToServer(trimmedRooms);
+                closeModal();
+                showMessage('Room settings saved successfully.', 'success');
+            } catch (error) {
+                showMessage(error.message || 'Could not save room settings.', 'error');
+            } finally {
+                saveManageRoomsButton.disabled = false;
+                if (saveRoomsButtonText) saveRoomsButtonText.classList.remove('hidden');
+                if (saveRoomsButtonLoading) saveRoomsButtonLoading.classList.add('hidden');
+            }
+        });
+    }
+
+    manageRoomsModal.addEventListener('click', function(e) {
+        if (e.target === manageRoomsModal) {
             closeModal();
         }
     });

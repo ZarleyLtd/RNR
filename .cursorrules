@@ -6,4 +6,4 @@
 - Data Flow: Frontend -> fetch -> Supabase Edge Function (rnr-api) -> PostgREST (schema: rnr).
 - Formatting: Use ISO 8601 (YYYY-MM-DD) for all date handling to avoid timezone issues.
 - Security: Family/Admin passwords (Edge Function secrets) + optional PIN codes per booking.
-- Features: Room booking (Master/Twin/Bunk/Entire House), conflict detection, activity logging, admin dashboard.
+- Features: Room booking (3 doubles / single / sofabed / Entire House), conflict detection, activity logging, admin dashboard.
